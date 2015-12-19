@@ -191,6 +191,7 @@
 			fs.open(f, FileMode.WRITE);
 			//First write the number of objects
 			fs.writeDouble(spaceObjects.length);
+			//Actions detail inside space file
 			fs.writeUTF(config_mc.access_txt.text);
 			for (var i:int = 0; i < spaceObjects.length; i++)
 			{

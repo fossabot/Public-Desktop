@@ -1,6 +1,7 @@
 ﻿package 
 {
 	
+	import com.fleo.irc.IRC;
 	import flash.desktop.NativeApplication;
 	import flash.desktop.NativeProcess;
 	import flash.desktop.NativeProcessStartupInfo;
@@ -24,8 +25,10 @@
 	import flash.utils.ByteArray;
 	import sfxworks.Communications;
 	import sfxworks.NetworkActionEvent;
+	import sfxworks.Space;
 	import sfxworks.SpaceContainer;
 	import flash.net.navigateToURL;
+	import sfxworks.SpaceService;
 	import sfxworks.UpdateEvent;
 	
 	public class main extends MovieClip
@@ -45,6 +48,7 @@
 		
 		//Space container
 		private var sc:SpaceContainer;
+		private var spaceService:SpaceService;
 		
 		public function main()
 		{
@@ -125,6 +129,9 @@
 			c.addEventListener(UpdateEvent.UPDATE, handleUpdateAvailible);
 			
 			stage.addEventListener(KeyboardEvent.KEY_DOWN, handleKeyDown);
+			
+			//Start space service..
+			spaceService = new SpaceService(c);
 			
 		}
 		
@@ -309,7 +316,7 @@
 			}
 			else
 			{
-				sc = new SpaceContainer(stage);
+				sc = new SpaceContainer(stage, c);
 				//resize(sc, stage.stageWidth, stage.stageHeight);
 				sc.x = (Screen.screens[0].bounds.width - sc.width) / 2;
 				//sc.y = (stage.stageHeight - sc.height) / 2;

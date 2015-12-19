@@ -170,7 +170,17 @@ package sfxworks
 		
 		private function objectRequest(args:String):void
 		{
-			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.OBJECT_REQUEST, "", args));
+			//Format:
+			//Target: Target service to handle the object request
+			//Args: Arguments for said service
+			//Example: SpaceService,0.0.0.0.0.0,defaultspace
+			
+			var argArray:Array = args.split(",");
+			argArray.reverse();
+			var target:String = argArray.pop(); //Target service for handling the argument
+			argArray.reverse();
+			
+			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.OBJECT_REQUEST, target, argArray));
 		}
 		
 		public function sendObject(object:Object, publicKey:ByteArray):void
