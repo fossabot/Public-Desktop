@@ -5,3 +5,4 @@ src/assets/64icon.png
 obj/desktopprojectConfig.old
 obj/desktopprojectConfig.old
 bin/ffmpeg/doc/libavdevice.html
+src/sfxworks/Communications.as

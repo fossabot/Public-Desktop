@@ -6,6 +6,7 @@
 	import flash.desktop.NativeProcessStartupInfo;
 	import flash.display.DisplayObject;
 	import flash.events.ProgressEvent;
+	import flash.geom.Rectangle;
 	import flash.html.HTMLLoader;
 	import flash.net.URLRequest;
 	import sfxworks.NetworkEvent;
@@ -49,10 +50,21 @@
 		{
 			stage.align = StageAlign.TOP_LEFT;
 			stage.scaleMode = StageScaleMode.NO_SCALE;
-			stage.stageWidth = stage.fullScreenWidth;
-			stage.stageHeight = stage.fullScreenHeight;
+			//stage.stageWidth = stage.fullScreenWidth;
+			//stage.stageHeight = stage.fullScreenHeight;
 			stage.nativeWindow.x = 0;
 			stage.nativeWindow.y = 0;
+			
+			//Multimonitor support
+			var rect:Rectangle = new Rectangle();
+			trace("Deteting monitors..");
+			for (var i:int = 0; i < Screen.screens.length; i++)
+			{
+				trace("Screen " + i + " bounds:" + Screen.screens[i].bounds);
+				rect = rect.union(Screen.screens[i].bounds);
+			}
+			trace("Setting window");
+			this.stage.nativeWindow.bounds = rect;
 			
 			
 			c = new Communications();
