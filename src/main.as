@@ -311,10 +311,8 @@
 			{
 				sc = new SpaceContainer(stage);
 				//resize(sc, stage.stageWidth, stage.stageHeight);
-				sc.x = (stage.stageWidth - sc.width) / 2;
+				sc.x = (Screen.screens[0].bounds.width - sc.width) / 2;
 				//sc.y = (stage.stageHeight - sc.height) / 2;
-				trace("stage width = " + stage.stageWidth);
-				trace("stage height = " + stage.stageHeight);
 				addChild(sc);
 				this.swapChildren(sc, sidebar_mc);
 				this.swapChildren(sc, communications_mc);
