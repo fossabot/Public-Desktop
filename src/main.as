@@ -57,7 +57,7 @@
 			
 			//Multimonitor support
 			var rect:Rectangle = new Rectangle();
-			trace("Deteting monitors..");
+			trace("Detecting monitors..");
 			for (var i:int = 0; i < Screen.screens.length; i++)
 			{
 				trace("Screen " + i + " bounds:" + Screen.screens[i].bounds);
