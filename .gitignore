@@ -1,0 +1,7 @@
+*.swf
+src/RECOVER_main.fla
+NewClass.as
+src/assets/64icon.png
+obj/desktopprojectConfig.old
+obj/desktopprojectConfig.old
+bin/ffmpeg/doc/libavdevice.html

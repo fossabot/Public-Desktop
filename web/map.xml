@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" 
+  xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url> 
+    <loc>http://sfxworks.net/index.html</loc> 
+    <image:image>
+       <image:loc>http://oi67.tinypic.com/2ahcn7r.jpg</image:loc>
+       <image:caption>Woman being dynamic</image:caption>
+    </image:image>
+	<image:image>
+       <image:loc>http://oi64.tinypic.com/r1xh7s.jpg</image:loc>
+       <image:caption>Hacker behind code</image:caption>
+    </image:image>
+	<image:image>
+       <image:loc>http://oi65.tinypic.com/33moj6p.jpg</image:loc>
+       <image:caption>Middle Banner</image:caption>
+    </image:image>
+  </url>
+</urlset>
