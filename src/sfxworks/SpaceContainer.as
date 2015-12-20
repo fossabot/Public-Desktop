@@ -125,7 +125,7 @@ package sfxworks
 			switch(responseType)
 			{
 				case "access granted":
-					var responseData:ByteArray; //Bytearray containing space data
+					var responseData:ByteArray; //Bytearray containing all data from SpaceService on remote client
 					returnResponse.readBytes(responseData, returnResponse.position, returnResponse.bytesAvailable);
 					//Read part of returnResponse into responseData. Start from it's current position, after it's readUTF()
 					//Contains entire array of external files and the origional space file
