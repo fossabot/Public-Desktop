@@ -14,6 +14,7 @@ package sfxworks
 		
 		public function SpaceService(communications:Communications) 
 		{
+			c = communications;
 			c.addEventListener(NetworkUserEvent.OBJECT_REQUEST, handleObjectRequest); //Handle incomming object requests
 		}
 		
@@ -48,19 +49,64 @@ package sfxworks
 					if (allowedToAccess(requestedSpace.nativePath, returnAddress)) //If it's allowed to access the space file
 					{
 						var ba:ByteArray = new ByteArray();
+						
+						ba.writeUTF("access granted"); //Later possibly get directly listing of avalible spaces and files
+						//[Filesize][File]
+						ba.writeFloat(requestedSpace.size);
+						
+						//Pack space file
 						var fs:FileStream = new FileStream();
-						fs.open(requestedSpace, FileMode.READ); //Read space file into a byte array
-						fs.readBytes(ba, 0, requestedSpace.size);
+						fs.open(requestedSpace, FileMode.READ);
+						fs.readBytes(ba, 0, requestedSpace.size); //Pack space file
+						
+						fs.position = 0;
+						var numberOfSpaceFiles:Number = fs.readFloat();
+						ba.writeFloat(numberOfSpaceFiles);
+						fs.readUTF(); //Skip access
+						
+						var afs:FileStream = new FileStream();
+						
+						//Pack associated files
+						for (var j:Number = 0; j < numberOfSpaceFiles; j++)
+						{
+							var sourceFile:File = new File(fs.readUTF()); //Source
+							fs.readUTF(); //Skip actions
+							fs.position += 88; //Skip object size and matrix data
+							
+							//Read image,video,or whatever into the bytearray
+							var fileDataToSend:ByteArray;
+							afs.open(sourceFile, FileMode.READ);
+							afs.readBytes(fileDataToSend, 0, sourceFile.size);
+							afs.close();
+							
+							ba.writeUTF(sourceFile.nativePath.split(":")[1]); //Truncate drive letter
+							ba.writeFloat(fileDataToSend.length);
+							ba.writeBytes(fileDataToSend, 0, fileDataToSend.length);
+						}
+						
+						
 						fs.close();
 						
-						//Send spacefile over to the requester.
+						c.sendObject(ba, ra); //Handle video streaming at later date vs sending entire video
+						
+						//Format [SpaceFileSize][SpaceFile][NumberOfObjects]
+						//[NativePath][FileSize][File]
+						//[NativePath][FileSize][File]Ect..
+					}
+					else
+					{
+						//Access denied by client.
+						var ba:ByteArray = new ByteArray();
+						ba.writeUTF("access denied");
 						c.sendObject(ba, ra);
 					}
 				}
 				else
 				{
 					//Couldn't find object. Send proper code.
-					c.sendObject("Four,Oh Four..", ra);
+					var ba:ByteArray = new ByteArray();
+					ba.writeUTF("Four,Oh Four..");
+					c.sendObject(ba, ra);
 				}
 				
 			}

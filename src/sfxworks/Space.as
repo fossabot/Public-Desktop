@@ -41,7 +41,7 @@
 		public var spaceObjects:Vector.<SpaceObject>;
 		private var selectedSpaceObject:SpaceObject;
 		
-		public function Space(stage:Stage, spaceToLoad:String="", editMode:Boolean=false):void
+		public function Space(stage:Stage, spaceToLoad:String="", editMode:Boolean=false, ext:Boolean=false, mockDirectory:File=null):void
 		{
 			stagee = stage;
 			editModee = editMode;
@@ -62,7 +62,14 @@
 				
 				for (var i:int = 0; i < numberOfObjects; i++)
 				{
-					var so:SpaceObject = new SpaceObject(fs.readUTF(), fs.readUTF(), new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), fs.readDouble(), new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), editModee);
+					if (ext)
+					{
+						var so:SpaceObject = new SpaceObject(mockDirectory.nativePath + fs.readUTF(), fs.readUTF(), new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), fs.readDouble(), new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), editModee);
+					}
+					else
+					{
+						var so:SpaceObject = new SpaceObject(fs.readUTF(), fs.readUTF(), new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), fs.readDouble(), new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), editModee);
+					}
 					
 					if (editModee)
 					{

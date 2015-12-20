@@ -128,16 +128,10 @@
 			//Handle new update
 			c.addEventListener(UpdateEvent.UPDATE, handleUpdateAvailible);
 			
-			stage.addEventListener(KeyboardEvent.KEY_DOWN, handleKeyDown);
 			
 			//Start space service..
 			spaceService = new SpaceService(c);
 			
-		}
-		
-		private function handleKeyDown(e:KeyboardEvent):void 
-		{
-			trace("Key pressed " + e.keyCode);
 		}
 		
 		private function handleUpdateAvailible(e:UpdateEvent):void 

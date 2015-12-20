@@ -11,6 +11,7 @@ package sfxworks
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
+	import flash.utils.ByteArray;
 	/**
 	 * ...
 	 * @author Samuel Jacob Walker
@@ -19,6 +20,9 @@ package sfxworks
 	{
 		//Stage focus
 		private var stagee:Stage;
+		
+		//Communications
+		private var c:Communications;
 		
 		private static const editframe:int = 7;
 		private static const mainFrame:int = 8;
@@ -31,10 +35,11 @@ package sfxworks
 		private static const spaceFeed:File = File.applicationStorageDirectory.resolvePath("feed.txt");
 		
 		
-		public function SpaceContainer(stage:Stage) //Intro frames - > Editor frame -> Display Frame
+		public function SpaceContainer(stage:Stage, communications:Communications) //Intro frames - > Editor frame -> Display Frame
 		{
 			stop();
 			stagee = stage;
+			c = communications;
 			
 			if (desktopFile.exists)
 			{
@@ -42,7 +47,7 @@ package sfxworks
 				this.x = (stagee.stageWidth - this.width) / 2;
 				navbar_mc.editor_btn.addEventListener(MouseEvent.CLICK, handleGotoEditorClick);
 				navbar_mc.loadspace_btn.addEventListener(MouseEvent.CLICK, handleSpaceLoadClick);
-				
+				navbar_mc.nav_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleNavKeyDown);
 				//Write to feed handles
 				feedinput_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleFeedKeyDown);
 			}
@@ -51,6 +56,127 @@ package sfxworks
 				next_btn.addEventListener(MouseEvent.CLICK, handleNextButton);
 				back_btn.addEventListener(MouseEvent.CLICK, handleBackButton);
 			}
+		}
+		
+		private function handleNavKeyDown(e:KeyboardEvent):void 
+		{
+			if (e.keyCode == 13) //Navbar enter
+			{
+				var stringKey:String = navbar_mc.nav_txt.text;
+				
+				navbar_mc.nav_txt.text = "requesting.."
+				
+				var numbers:Array  = stringKey.split(".");
+				var ba:ByteArray = new ByteArray();
+				var myIdString:String = new String();
+				for (var i:int = 0; i < numbers.length; i++)
+				{
+					ba.writeDouble(parseFloat(numbers[i]));
+					myIdString += c.publicKey[i].toString() + ".";
+				}
+				var requestedFile:String = stringKey.split("/")[1];
+				if (requestedFile != "")
+				{
+					c.requestObject(ba, "spaceservice," + myIdString + "," + requestedFile);
+				}
+				else
+				{
+					c.requestObject(ba, "spaceservice," + myIdString + "," + "default.space");
+				}
+				
+				c.addEventListener(NetworkActionEvent.SUCCESS, handleNavRequestSuccess);
+				c.addEventListener(NetworkActionEvent.ERROR, handleNavRequestError);
+			}
+		}
+		
+		private function handleNavRequestError(e:NetworkActionEvent):void 
+		{
+			trace("No target found.");
+			
+			c.removeEventListener(NetworkActionEvent.SUCCESS, handleNavRequestSuccess);
+			c.removeEventListener(NetworkActionEvent.ERROR, handleNavRequestError);
+			
+			navbar_mc.nav_txt.text = "couldn't find that public key.";
+		}
+		
+		private function handleNavRequestSuccess(e:NetworkActionEvent):void 
+		{
+			trace("Successfully sent request to target.");
+			
+			navbar_mc.nav_txt.text = "request sent. waiting for response..";
+			
+			c.removeEventListener(NetworkActionEvent.SUCCESS, handleNavRequestSuccess);
+			c.removeEventListener(NetworkActionEvent.ERROR, handleNavRequestError);
+			
+			//Add event listener to handle recieved object.
+			c.addEventListener(NetworkUserEvent.OBJECT_RECIEVED, handleObjectRecieved);
+		}
+		
+		private function handleObjectRecieved(e:NetworkUserEvent):void 
+		{
+			//Remove event listener
+			c.removeEventListener(NetworkUserEvent.OBJECT_RECIEVED, handleObjectRecieved);
+			
+			navbar_mc.nav_txt.text = "recieved object.";
+			
+			var returnResponse:ByteArray = e.message as ByteArray;
+			var responseType:String = returnResponse.readUTF();
+			
+			switch(responseType)
+			{
+				case "access granted":
+					var responseData:ByteArray; //Bytearray containing space data
+					returnResponse.readBytes(responseData, returnResponse.position, returnResponse.bytesAvailable);
+					//Read part of returnResponse into responseData. Start from it's current position, after it's readUTF()
+					//Contains entire array of external files and the origional space file
+					
+					//Goal: Write all bytearrays to temp files and pass their path to SpaceObject (Or temp directory + )
+					
+					//Read the space file into the bytearray
+					var responseSpace:ByteArray = new ByteArray();
+					responseData.readBytes(responseSpace, 0, responseData.readFloat()); 
+					
+					
+					//Write space file to temp file
+					var fs:FileStream = new FileStream();
+					var tmpSpaceFile:File = File.createTempFile();
+					fs.open(tmpSpaceFile, FileMode.WRITE);
+					fs.writeBytes(responseSpace);
+					fs.close();
+					
+					//Create temporary directory. Mocks folder structure of source. [Could do it differently to hide username]
+					var tmpDir:File = File.createTempDirectory();
+					
+					//Write files to temporary directory, mocking the structure of the remote user
+					var numberOfExternalFiles:Number = responseData.readFloat();
+					
+					for (var i:Number = 0; i < numberOfExternalFiles; i++)
+					{
+						//OS TODO: Parse all \ and convert them to proper file.separetor.
+						var tmpSourceFile:File = new File(tmpDir.nativePath + responseData.readUTF());
+						fs.open(tmpSourceFile, FileMode.WRITE);
+						//Start from current position, read the next float to get the length to read
+						fs.writeBytes(returnResponse, returnResponse.position, returnResponse.readFloat()); 
+						fs.close();
+					}
+					
+					//Create space, pass temporary directory to Space
+					var space:Space = new Space(stagee, tmpSpaceFile.nativePath, false, true, tmpDir);
+					addChild(space);
+					swapChildren(navbar_mc, space);
+					currentSpaceObject = space;
+					
+					this.x = 0;
+					this.y = 0;
+					break;
+				case "access denied":
+					navbar_mc.navbar_txt.text = "Access denied..";
+					break;
+				case "Four,Oh Four..":
+					navbar_mc.navbar_txt.text = "Space not found..";
+					break;
+			}
+			
 		}
 		
 		private function handleFeedKeyDown(e:KeyboardEvent):void 
