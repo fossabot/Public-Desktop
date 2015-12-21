@@ -7,6 +7,8 @@ package sfxworks
 	import com.maclema.mysql.Statement;
 	import flash.desktop.NativeApplication;
 	import flash.events.IOErrorEvent;
+	import flash.net.GroupSpecifier;
+	import flash.net.NetGroup;
 	import flash.net.URLLoader;
 	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkErrorEvent;
@@ -60,6 +62,13 @@ package sfxworks
 		private var applicationContent:XML;
 		private var currentVersion:Number;
 		
+		//Group Management: For chat, video communication or whatever other services
+		private var groups:Vector.<NetGroup>;
+		private var groupNames:Vector.<String>;
+		
+		
+		
+		
 		public function Communications() 
 		{
 			netConnection = new NetConnection();
@@ -101,6 +110,64 @@ package sfxworks
 			currentVersion = new Number(parseFloat(appXML.ns::versionNumber));
 			
 			trace("Applicaton Version = " + currentVersion);
+			
+		}
+		
+		//-- Group Management
+		public function addGroup(groupName:String, groupSpecifier:GroupSpecifier):void
+		{
+			var netgroup:NetGroup = new NetGroup(netConnection, groupSpecifier);
+			netgroup.addEventListener(NetStatusEvent.NET_STATUS, handleNetGroupStatus);
+		}
+		
+		public function addWantObject(groupName:String, startIndex:Number, endIndex:Number):void //Requests objects from the group.
+		{
+			groups[groupName.indexOf(groupName)].addWantObjects(startIndex, endIndex);
+		}
+		
+		public function addHaveObject(groupName:String, startIndex:Number, endIndex:Number):void //Adds a list of object the service, or whatever calls on commuication has.
+		{
+			groups[groupName.indexOf(groupName)].addHaveObjects(startIndex, endIndex);
+		}
+		
+		private function handleNetGroupStatus(e:NetStatusEvent):void 
+		{
+			switch(e.info.code)
+			{ 
+				case "NetGroup.Connect.Success":
+					trace("Connection to group " + groupNames[groups.indexOf(e.target)] + " successful");
+					//Dispatch connected event. Send group name in event handler.
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_SUCCESSFUL, groupNames[groups.indexOf(e.target)]);
+					break; 
+				case "NetGroup.Connect.Failed":
+					//Dispatc failer. Remove from index
+					trace("Connection to group " + groupNames[groups.indexOf(e.target)] + " failed");
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_FAILED, groupNames[groups.indexOf(e.target)]);
+					groupNames.splice(groups.indexOf(e.target), 1); //Remove from groupnames index
+					groups.splice(groups.indexOf(e.target), 1); //Remove from groups index
+					break;
+				case "NetGroup.Posting.Notify": 
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.POST, groupNames[groups.indexOf(e.target)], e.info.message);
+					break;
+				case "NetGroup.Replication.Fetch.SendNotify": //Send when this is about to send a request to neighbor who has the obejct
+					break;
+				case "NetGroup.Replication.Fetch.Result": //When a neighbor has sent a requested object.
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_RECIEVED, groupNames[groups.indexOf(e.target)], e.info.object, e.info.index);
+					break;
+				case "NetGroup.Replication.Request": //When communications has the object and recieved a request for the object
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_REQUEST, groupNames[groups.indexOf(e.target)], null, e.info.index);
+					break;
+			}
+		}
+		
+		public function satisfyObjectRequest(groupName:String, objectNumber:Number, object:Object):void
+		{
+			groups[groupNames.indexOf(groupName)].writeRequestedObject(objectNumber, object);
+		}
+		
+		public function getGroup(groupName:String):NetGroup
+		{
+			return groups[groupNames.indexOf(groupName)];
 		}
 		
 		private function handleIOError(e:IOErrorEvent):void 
@@ -279,34 +346,6 @@ package sfxworks
 			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.MESSAGE, user, message));
 		}
 		
-		private function refreshNetworkConnections():void
-		{
-			var s:Statement = mysqlConnection.createStatement();
-			s.sql = "SELECT `nearid` FROM `users`;";
-			var t:MySqlToken = s.executeQuery();
-			
-			t.addResponder(new AsyncResponder(refreshNetworkConnectionSuccess, refreshNetworkConnectionError, t));
-		}
-		
-		private function refreshNetworkConnectionError(info:Object, token:MySqlToken):void 
-		{
-			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, info));
-		}
-		
-		private function refreshNetworkConnectionSuccess(data:Object, token:MySqlToken):void 
-		{
-			var rs:ResultSet = new ResultSet(token);
-			
-			for (var i:int = 0; i < rs.size(); i++)
-			{
-				var ns:NetStream = new NetStream(netConnection, rs.getString("nearid"));
-				ns.play("desktop");
-				netConnections.push(ns);
-				rs.next();
-			}
-			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.REFRESH, data));
-		}
-		
 		private function mysql():void
 		{
 			mysqlConnection = new Connection("-.sfxworks.net", 9001, "-", "-", "-");
@@ -359,14 +398,13 @@ package sfxworks
 			var t:MySqlToken = st.executeQuery();
 			t.addResponder(new AsyncResponder(mysqlNearIDUpdateSuccess, mysqlNearIDUpdateError, t));
 			
-			timerRefresh = new Timer(10000);
+			timerRefresh = new Timer(40000);
 			timerRefresh.addEventListener(TimerEvent.TIMER, networkTimerRefresh);
 			timerRefresh.start();
 		}
 		
 		private function networkTimerRefresh(e:TimerEvent):void 
 		{
-			refreshNetworkConnections();
 			checkForUpdate();
 		}
 		
