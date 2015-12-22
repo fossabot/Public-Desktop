@@ -64,6 +64,7 @@
     <element path="src\org" />
     <element path="src\org\bytearray" />
     <element path="src\org\bytearray\gif" />
+    <element path="src\blooddy_crypto.swc" />
   </libraryPaths>
   <!-- External Libraries -->
   <externalLibraryPaths>

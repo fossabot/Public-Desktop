@@ -41,6 +41,16 @@ package sfxworks
 			return _groupObject;
 		}
 		
+		public function get groupObjectNumber():Number 
+		{
+			return _groupObjectNumber;
+		}
+		
+		public function get groupName():String 
+		{
+			return _groupName;
+		}
+		
 	}
 	
 }

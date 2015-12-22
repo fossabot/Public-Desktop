@@ -130,6 +130,11 @@ package sfxworks
 			groups[groupName.indexOf(groupName)].addHaveObjects(startIndex, endIndex);
 		}
 		
+		public function removeHaveObject(groupName:String, startIndex:Number, endIndex:Number):void
+		{
+			groups[groupName.indexOf(groupName)].removeHaveObjects(startIndex, endIndex);
+		}
+		
 		private function handleNetGroupStatus(e:NetStatusEvent):void 
 		{
 			switch(e.info.code)
