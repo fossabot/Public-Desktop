@@ -9,25 +9,27 @@ package
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
+	import flash.text.TextField;
 	import flash.utils.Timer;
 	import nop.away3d.AWDViewer;
 	/**
 	 * ...
-	 * @author ...
+	 * @author Samuel Walker
 	 */
 	
-	public class background extends MovieClip 
+	public class Background extends MovieClip 
 	{
 		private var fs:FileStream;
 		private var bg:File;
 		private var d:Date;
 		
-		public function background() 
+		private var timetext:TextField = new TextField();
+		
+		public function Background(bgwidth:int, bgheight:int) 
 		{
-			super();
-			removeChild(bg_mc);
+			removeChildren();
 			
-			var awd:AWDViewer = new AWDViewer(stage.fullScreenWidth, stage.fullScreenHeight);
+			var awd:AWDViewer = new AWDViewer(bgwidth, bgheight);
 			addChild(awd);
 			awd.showByURL(File.applicationDirectory.resolvePath("assets" + File.separator + "desktop.awd").nativePath);
 			
@@ -45,8 +47,10 @@ package
 			t.addEventListener(TimerEvent.TIMER, updateTime);
 			t.start();
 			
-			time_txt.width = stage.fullScreenWidth;// - (stage.fullScreenWidth - time_txt.width) / 2;
-			time_txt.x = 0;
+			timetext.width = bgwidth;// - (stage.fullScreenWidth - time_txt.width) / 2;
+			timetext.x = 0;
+			
+			addChild(timetext);
 		}
 		
 		private function updateTime(e:TimerEvent):void 
@@ -54,7 +58,7 @@ package
 			d = new Date();
 			var m:int = d.getMonth();
 			m++;
-			time_txt.text =  m.toString() + "." + d.getDate().toString() + "." + d.getFullYear().toString() + " " + d.getHours().toString() + ":" + d.getMinutes().toString() + ":" + d.getSeconds().toString();
+			timetext.text =  m.toString() + "." + d.getDate().toString() + "." + d.getFullYear().toString() + " " + d.getHours().toString() + ":" + d.getMinutes().toString() + ":" + d.getSeconds().toString();
 		}
 		
 		public function setbackground(display:DisplayObject):void

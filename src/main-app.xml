@@ -27,7 +27,7 @@
   <initialWindow>
     <content>main.swf</content>
     <systemChrome>none</systemChrome>
-    <transparent>false</transparent>
+    <transparent>true</transparent>
     <visible>true</visible>
     <fullScreen>false</fullScreen>
     <aspectRatio>portrait</aspectRatio>
