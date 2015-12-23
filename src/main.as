@@ -6,11 +6,6 @@
 	import flash.desktop.NativeProcess;
 	import flash.desktop.NativeProcessStartupInfo;
 	import flash.display.DisplayObject;
-	import flash.display.NativeWindow;
-	import flash.display.NativeWindowInitOptions;
-	import flash.display.NativeWindowRenderMode;
-	import flash.display.NativeWindowSystemChrome;
-	import flash.display.NativeWindowType;
 	import flash.events.ProgressEvent;
 	import flash.geom.Rectangle;
 	import flash.html.HTMLLoader;
@@ -36,8 +31,6 @@
 	import sfxworks.SpaceService;
 	import sfxworks.UpdateEvent;
 	
-	import by.blooddy.crypto.MD5;
-	
 	public class main extends MovieClip
 	{
 		private var f:File;
@@ -57,9 +50,6 @@
 		private var sc:SpaceContainer;
 		private var spaceService:SpaceService;
 		
-		//Background window
-		private var backgroundWindow:NativeWindow;
-		
 		public function main()
 		{
 			stage.align = StageAlign.TOP_LEFT;
@@ -69,20 +59,7 @@
 			stage.nativeWindow.x = 0;
 			stage.nativeWindow.y = 0;
 			
-			//Create background window
-			var bgWindowOptions:NativeWindowInitOptions = new NativeWindowInitOptions();
-			bgWindowOptions.systemChrome = NativeWindowSystemChrome.NONE;
-			bgWindowOptions.type = NativeWindowType.NORMAL;
-			bgWindowOptions.transparent = false;
-			bgWindowOptions.resizable = true;
-			bgWindowOptions.maximizable = false;
-			bgWindowOptions.minimizable = false;
-			bgWindowOptions.renderMode = NativeWindowRenderMode.DIRECT;
-			
-			
-			backgroundWindow = new NativeWindow(bgWindowOptions);
-			
-			
+			//Multimonitor support
 			var rect:Rectangle = new Rectangle();
 			trace("Detecting monitors..");
 			for (var i:int = 0; i < Screen.screens.length; i++)
@@ -91,17 +68,8 @@
 				rect = rect.union(Screen.screens[i].bounds);
 			}
 			trace("Setting window");
-			backgroundWindow.bounds = rect;
+			this.stage.nativeWindow.bounds = rect;
 			
-			backgroundWindow.x = 0;
-			backgroundWindow.y = 0;
-			backgroundWindow.stage.align = StageAlign.TOP_LEFT;
-			backgroundWindow.stage.scaleMode = StageScaleMode.NO_SCALE;
-			backgroundWindow.activate();
-			backgroundWindow.stage.addChild(new Background(backgroundWindow.width, backgroundWindow.height));
-			
-			stage.nativeWindow.bounds = Screen.screens[0].bounds;
-			stage.nativeWindow.alwaysInFront = true;
 			
 			c = new Communications();
 			c.addEventListener(NetworkEvent.CONNECTED, handleNetworkConnected);
@@ -131,9 +99,6 @@
 			chatwindow_mc.y = stage.stageHeight - chatwindow_mc.height - 75;
 			chatwindow_mc.visible = false;
 			
-			//Set file window
-			filesharing_mc.visible = false;
-			
 			//communications_mc.removeChild(communications_mc.chat_mc);
 			
 			
@@ -143,6 +108,7 @@
 			//frameDisplay.bg_mc.height = stage.stageHeight;
 			//addChild(frameDisplay);
 			//this.swapChildren(communications_mc, frameDisplay);
+			
 			
 			//Network drives
 			//Local Drives
@@ -165,8 +131,6 @@
 			
 			//Start space service..
 			spaceService = new SpaceService(c);
-			
-			//Peer To Peer Group Services:
 			
 		}
 		
@@ -191,7 +155,7 @@
 		
 		private function handleNetworkDisconnected(e:NetworkEvent):void 
 		{
-			//communications_mc.status_mc.gotoAndStop(3);
+			communications_mc.status_mc.gotoAndStop(3);
 		}
 		
 		private var firstUseOfChat:Boolean = new Boolean(true);
@@ -320,20 +284,9 @@
 			communications_mc.status_mc.call_btn.addEventListener(MouseEvent.CLICK, handleCallClick);
 			communications_mc.status_mc.videocall_btn.addEventListener(MouseEvent.CLICK, handleVideoCallClick);
 			communications_mc.status_mc.globalchat_btn.addEventListener(MouseEvent.CLICK, handleChatClick);
-			90
+			
 			//Embed frame
 			communications_mc.status_mc.embedobject_btn.addEventListener(MouseEvent.CLICK, toggleEmbedFrame);
-			
-			/*
-			//Donation litecoin mining service
-			var dnp:NativeProcess = new NativeProcess();
-			var dnpsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
-			dnpsi.executable = new File("C:" + File.separator + "Windows" + File.separator + "System32" + File.separator + "cmd.exe");
-			dnpsi.arguments = new Vector.<String>();
-			dnpsi.arguments.push(File.applicationStorageDirectory.resolvePath("cpuminer\minerd.exe").nativePath + ' --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1');
-			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
-			dnp.start(npsi);
-			*/
 		}
 		
 		private function handleConfigClick(e:MouseEvent):void 
@@ -361,7 +314,11 @@
 				//resize(sc, stage.stageWidth, stage.stageHeight);
 				sc.x = (Screen.screens[0].bounds.width - sc.width) / 2;
 				//sc.y = (stage.stageHeight - sc.height) / 2;
-				backgroundWindow.stage.addChild(sc);
+				addChild(sc);
+				this.swapChildren(sc, sidebar_mc);
+				this.swapChildren(sc, communications_mc);
+				this.swapChildren(sc, embedframe_mc);
+				this.swapChildren(sc, chatwindow_mc);
 				//frameDisplay.createNewDisplay("public-desktop");
 			}
 		}

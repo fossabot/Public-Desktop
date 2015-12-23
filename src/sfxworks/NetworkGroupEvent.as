@@ -18,25 +18,25 @@ package sfxworks
 		private var _groupObject:Object; //info.message or shared group object
 		private var _groupObjectNumber:Number;
 		
-		public function NetworkGroupEvent(type:String, groupName:String, groupObject:Object = null, groupObjectNumber:Number = -1, bubbles:Boolean = false, cancelable:Boolean = false) 
+		public function NetworkGroupEvent(type:String, groupName:String, groupObject:Object = null, groupObjectNumber:Number = null, bubbles:Boolean = false, cancelable:Boolean = false) 
 		{ 
-			super(type, bubbles, cancelable);
 			_groupName = groupName;
 			_groupObject = groupObject;
 			_groupObjectNumber = groupObjectNumber;
+			super(type, _groupName, bubbles, cancelable);
 		} 
 		
 		public override function clone():Event 
 		{ 
-			return new NetworkGroupEvent(type, _groupName, _groupObject, _groupObjectNumber, bubbles, cancelable);
+			return new NetworkGroupEvent(type, _groupObject, bubbles, cancelable);
 		} 
 		
 		public override function toString():String 
 		{ 
-			return formatToString("NetworkGroupEvent", "type", "groupName", "groupObject", "groupObjectNumber", "bubbles", "cancelable", "eventPhase"); 
+			return formatToString("NetworkGroupEvent", "type", "groupObject", "groupObjectNumber", "bubbles", "cancelable", "eventPhase"); 
 		}
 		
-		public function get groupObject():Object 
+		public function get groupObject():String 
 		{
 			return _groupObject;
 		}
