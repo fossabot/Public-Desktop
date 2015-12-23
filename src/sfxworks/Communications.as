@@ -116,7 +116,9 @@ package sfxworks
 		//-- Group Management
 		public function addGroup(groupName:String, groupSpecifier:GroupSpecifier):void
 		{
-			var netgroup:NetGroup = new NetGroup(netConnection, groupSpecifier);
+			groups.push(netgroup);
+			groupNames.push(groupName);
+			var netgroup:NetGroup = new NetGroup(netConnection, groupSpecifier.toString());
 			netgroup.addEventListener(NetStatusEvent.NET_STATUS, handleNetGroupStatus);
 		}
 		
@@ -142,25 +144,25 @@ package sfxworks
 				case "NetGroup.Connect.Success":
 					trace("Connection to group " + groupNames[groups.indexOf(e.target)] + " successful");
 					//Dispatch connected event. Send group name in event handler.
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_SUCCESSFUL, groupNames[groups.indexOf(e.target)]);
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_SUCCESSFUL, groupNames[groups.indexOf(e.target)]));
 					break; 
 				case "NetGroup.Connect.Failed":
 					//Dispatc failer. Remove from index
 					trace("Connection to group " + groupNames[groups.indexOf(e.target)] + " failed");
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_FAILED, groupNames[groups.indexOf(e.target)]);
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_FAILED, groupNames[groups.indexOf(e.target)]));
 					groupNames.splice(groups.indexOf(e.target), 1); //Remove from groupnames index
 					groups.splice(groups.indexOf(e.target), 1); //Remove from groups index
 					break;
 				case "NetGroup.Posting.Notify": 
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.POST, groupNames[groups.indexOf(e.target)], e.info.message);
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.POST, groupNames[groups.indexOf(e.target)], e.info.message));
 					break;
 				case "NetGroup.Replication.Fetch.SendNotify": //Send when this is about to send a request to neighbor who has the obejct
 					break;
 				case "NetGroup.Replication.Fetch.Result": //When a neighbor has sent a requested object.
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_RECIEVED, groupNames[groups.indexOf(e.target)], e.info.object, e.info.index);
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_RECIEVED, groupNames[groups.indexOf(e.target)], e.info.object, e.info.index));
 					break;
 				case "NetGroup.Replication.Request": //When communications has the object and recieved a request for the object
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_REQUEST, groupNames[groups.indexOf(e.target)], null, e.info.index);
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_REQUEST, groupNames[groups.indexOf(e.target)], null, e.info.index));
 					break;
 			}
 		}
