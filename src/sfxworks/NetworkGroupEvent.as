@@ -8,11 +8,11 @@ package sfxworks
 	 */
 	public class NetworkGroupEvent extends Event 
 	{
-		public static const CONNECTION_SUCCESSFUL:String = "connected";
-		public static const CONNECTION_FAILED:String = "failed";
-		public static const POST:String = "post";
-		public static const OBJECT_RECIEVED:String = "objectRecieved";
-		public static const OBJECT_REQUEST:String = "objectRequest";
+		public static const CONNECTION_SUCCESSFUL:String = "ngconnected";
+		public static const CONNECTION_FAILED:String = "ngfailed";
+		public static const POST:String = "ngpost";
+		public static const OBJECT_RECIEVED:String = "ngobjectRecieved";
+		public static const OBJECT_REQUEST:String = "ngobjectRequest";
 		
 		private var _groupName:String;
 		private var _groupObject:Object; //info.message or shared group object

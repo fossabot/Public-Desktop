@@ -6,7 +6,9 @@ package sfxworks
 	import com.maclema.mysql.ResultSet;
 	import com.maclema.mysql.Statement;
 	import flash.desktop.NativeApplication;
+	import flash.errors.IOError;
 	import flash.events.IOErrorEvent;
+	import flash.events.SecurityErrorEvent;
 	import flash.net.GroupSpecifier;
 	import flash.net.NetGroup;
 	import flash.net.URLLoader;
@@ -28,6 +30,7 @@ package sfxworks
 	import flash.net.URLRequest;
 	import flash.utils.ByteArray;
 	import flash.utils.Timer;
+	import sfxworks.NetworkGroupEvent;
 	import mx.rpc.AsyncResponder;
 	/**
 	 * ...
@@ -81,6 +84,9 @@ package sfxworks
 			tmpargs = new String();
 			objectToSend = new Object();
 			
+			groups = new Vector.<NetGroup>();
+			groupNames = new Vector.<String>();
+			
 			timerRefresh = new Timer(10000);
 			
 			netConnection.connect("rtmfp://p2p.rtmfp.net", "-");
@@ -93,7 +99,7 @@ package sfxworks
 			 * Service Monitor
 			 * */
 			
-			monitor = new URLMonitor(new URLRequest("http://sfxworks.net"));
+			monitor = new URLMonitor(new URLRequest("http://youtube.com"));
 			monitor.addEventListener(StatusEvent.STATUS, handleMonitorStatus);
 			monitor.start();
 			
@@ -109,17 +115,18 @@ package sfxworks
 			var ns:Namespace = appXML.namespace();
 			currentVersion = new Number(parseFloat(appXML.ns::versionNumber));
 			
-			trace("Applicaton Version = " + currentVersion);
+			trace("COMMUNICATIONS: Applicaton Version = " + currentVersion);
 			
 		}
 		
 		//-- Group Management
 		public function addGroup(groupName:String, groupSpecifier:GroupSpecifier):void
 		{
-			groups.push(netgroup);
 			groupNames.push(groupName);
-			var netgroup:NetGroup = new NetGroup(netConnection, groupSpecifier.toString());
-			netgroup.addEventListener(NetStatusEvent.NET_STATUS, handleNetGroupStatus);
+			var netGroup:NetGroup = new NetGroup(netConnection, groupSpecifier.groupspecWithAuthorizations());
+			groups.push(netGroup);
+			trace("COMMUNICATIONS: Attempting to add group "  + groupName);
+			trace("COMMUNICATIONS: Netgroup = " + netGroup);
 		}
 		
 		public function addWantObject(groupName:String, startIndex:Number, endIndex:Number):void //Requests objects from the group.
@@ -129,42 +136,17 @@ package sfxworks
 		
 		public function addHaveObject(groupName:String, startIndex:Number, endIndex:Number):void //Adds a list of object the service, or whatever calls on commuication has.
 		{
-			groups[groupName.indexOf(groupName)].addHaveObjects(startIndex, endIndex);
+			trace("groupname = " + groupName);
+			trace("start index = " + startIndex);
+			trace("end index = " + endIndex);
+			trace("Current group name = " + groupNames[0]);
+			trace("Current group = " + groups[0]);
+			groups[groupNames.indexOf(groupName)].addHaveObjects(startIndex, endIndex);
 		}
 		
 		public function removeHaveObject(groupName:String, startIndex:Number, endIndex:Number):void
 		{
-			groups[groupName.indexOf(groupName)].removeHaveObjects(startIndex, endIndex);
-		}
-		
-		private function handleNetGroupStatus(e:NetStatusEvent):void 
-		{
-			switch(e.info.code)
-			{ 
-				case "NetGroup.Connect.Success":
-					trace("Connection to group " + groupNames[groups.indexOf(e.target)] + " successful");
-					//Dispatch connected event. Send group name in event handler.
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_SUCCESSFUL, groupNames[groups.indexOf(e.target)]));
-					break; 
-				case "NetGroup.Connect.Failed":
-					//Dispatc failer. Remove from index
-					trace("Connection to group " + groupNames[groups.indexOf(e.target)] + " failed");
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_FAILED, groupNames[groups.indexOf(e.target)]));
-					groupNames.splice(groups.indexOf(e.target), 1); //Remove from groupnames index
-					groups.splice(groups.indexOf(e.target), 1); //Remove from groups index
-					break;
-				case "NetGroup.Posting.Notify": 
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.POST, groupNames[groups.indexOf(e.target)], e.info.message));
-					break;
-				case "NetGroup.Replication.Fetch.SendNotify": //Send when this is about to send a request to neighbor who has the obejct
-					break;
-				case "NetGroup.Replication.Fetch.Result": //When a neighbor has sent a requested object.
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_RECIEVED, groupNames[groups.indexOf(e.target)], e.info.object, e.info.index));
-					break;
-				case "NetGroup.Replication.Request": //When communications has the object and recieved a request for the object
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_REQUEST, groupNames[groups.indexOf(e.target)], null, e.info.index));
-					break;
-			}
+			groups[groupNames.indexOf(groupName)].removeHaveObjects(startIndex, endIndex);
 		}
 		
 		public function satisfyObjectRequest(groupName:String, objectNumber:Number, object:Object):void
@@ -179,7 +161,12 @@ package sfxworks
 		
 		private function handleIOError(e:IOErrorEvent):void 
 		{
-			trace("IO Error..");
+			trace("COMMUNICATIONS: IO Error..");
+		}
+		
+		private function handleSecurityError(e:SecurityErrorEvent):void
+		{
+			trace("COMMUNICATIONS: Security error..");
 		}
 		
 		private function generateKey(size:int):ByteArray
@@ -216,7 +203,7 @@ package sfxworks
 			switch(e.info.code)
 			{ 
 				case "NetConnection.Connect.Success":
-					trace("Net connection successful. Init mysql connection.");
+					trace("COMMUNICATIONS: Net connection successful. Init mysql connection.");
 					_myNetConnection = new NetStream(netConnection, NetStream.DIRECT_CONNECTIONS);
 					mysql();
 					break; 
@@ -224,8 +211,33 @@ package sfxworks
 					dispatchEvent(new NetworkEvent(NetworkEvent.DISCONNECTED, netConnection.nearID));
 					break; 
 				case "NetConnection.Connect.Failed":
-					dispatchEvent(new NetworkEvent(NetworkEvent.ERROR, netConnection.nearID)); //Will be null on error
-					break;  
+					dispatchEvent(new NetworkEvent(NetworkEvent.ERROR, "none")); //Will be null on error
+					trace("netconnection error: = " + e.info.error);
+					break;
+				case "NetGroup.Connect.Success":
+					trace("Can we get some info on " + e.info.group);
+					trace("COMMUNICATIONS: Connection to group " + groupNames[groups.indexOf(e.info.group)] + " successful");
+					//Dispatch connected event. Send group name in event handler
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_SUCCESSFUL, groupNames[groups.indexOf(e.info.group)]));
+					break; 
+				case "NetGroup.Connect.Failed":
+					//Dispatch when group connection failed. Remove from index
+					trace("Connection to group " + groupNames[groups.indexOf(e.target)] + " failed");
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_FAILED, groupNames[groups.indexOf(e.info.group)]));
+					groupNames.splice(groups.indexOf(e.info.group), 1); //Remove from groupnames index
+					groups.splice(groups.indexOf(e.info.group), 1); //Remove from groups index
+					break;
+				case "NetGroup.Posting.Notify": 
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.POST, groupNames[groups.indexOf(e.info.group)], e.info.message));
+					break;
+				case "NetGroup.Replication.Fetch.SendNotify": //Send when this is about to send a request to neighbor who has the obejct
+					break;
+				case "NetGroup.Replication.Fetch.Result": //When a neighbor has sent a requested object.
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_RECIEVED, groupNames[groups.indexOf(e.info.group)], e.info.object, e.info.index));
+					break;
+				case "NetGroup.Replication.Request": //When communications has the object and recieved a request for the object
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_REQUEST, groupNames[groups.indexOf(e.info.group)], null, e.info.index));
+					break;
 			}
 		}
 		
@@ -316,7 +328,7 @@ package sfxworks
 			else
 			{
 				this.removeEventListener(NetworkActionEvent.SUCCESS, makeCall);
-				trace("COULDNT FIND TARGET");
+				trace("COMMUNICATIONS: COULDNT FIND TARGET");
 				dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, data));
 			}
 		}
@@ -355,21 +367,24 @@ package sfxworks
 		
 		private function mysql():void
 		{
-			mysqlConnection = new Connection("-.sfxworks.net", 9001, "-", "-", "-");
+			mysqlConnection = new Connection("-", 9001, "-", "-", "-");
 			mysqlConnection.connect();
 			mysqlConnection.addEventListener(Event.CONNECT, handleMysqlConnection);
+			mysqlConnection.addEventListener(IOErrorEvent.IO_ERROR, handleIOError);
+			mysqlConnection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, handleSecurityError);
+			trace("COMMUNICATIONS: Attemting to connect to mysql main server");
 		}
 		
 		private function handleMysqlConnection(e:Event):void 
 		{
-			trace("Connected.");
+			trace("COMMUNICATIONS: Connected.");
 			mysqlConnection.removeEventListener(Event.CONNECT, handleMysqlConnection);
 			
 			var f:File = new File();
 			f = File.applicationStorageDirectory.resolvePath(".s2key");
 			var fs:FileStream = new FileStream();
 			var st:Statement = mysqlConnection.createStatement();
-			trace("Checking key.");
+			trace("COMMUNICATIONS: Checking key.");
 			if (f.exists) //Update
 			{
 				trace("Exists.");
@@ -385,7 +400,7 @@ package sfxworks
 			}
 			else //Register
 			{
-				trace("Nonexistant. Registering..");
+				trace("COMMUNICATIONS: Nonexistant. Registering..");
 				_privateKey = generateKey(999);
 				_publicKey = generateKey(5);
 				_name = File.userDirectory.name;
@@ -401,7 +416,7 @@ package sfxworks
 				st.setBinary(2, _publicKey);
 			}
 			
-			trace("Sending query to server..");
+			trace("COMMUNICATIONS: Sending query to server..");
 			var t:MySqlToken = st.executeQuery();
 			t.addResponder(new AsyncResponder(mysqlNearIDUpdateSuccess, mysqlNearIDUpdateError, t));
 			
@@ -417,8 +432,16 @@ package sfxworks
 		
 		private function checkForUpdate():void 
 		{
-			trace("Checking for update..");
-			versionCheckLoader.load(versionCheckSource);
+			trace("COMMUNICATIONS: Checking for update..");
+			try
+			{
+				versionCheckLoader.load(versionCheckSource);
+			}
+			catch(ioerror:IOError)
+			{
+				trace("COMMUNICATIONS: ioError from version checker. " + ioerror.message);
+			}
+			trace("End of check for update function..");
 		}
 		
 		private function parseUpdateDetail(e:Event):void
@@ -428,25 +451,25 @@ package sfxworks
 			var standardVersion:Number = new Number(parseFloat(applicationContent.ns::currentVersion));
 			var source:String = new String(applicationContent.ns::source);
 			
-			trace("Standard version = " + standardVersion);
-			trace("Current version = " + currentVersion);
+			trace("COMMUNICATIONS: Standard version = " + standardVersion);
+			trace("COMMUNICATIONS: Current version = " + currentVersion);
 			
 			if (standardVersion > currentVersion)
 			{
 				dispatchEvent(new UpdateEvent(UpdateEvent.UPDATE, standardVersion, source));
-				trace("New Version Avalible");
+				trace("COMMUNICATIONS: New Version Avalible");
 			}
 		}
 		
 		private function mysqlNearIDUpdateError(info:Object, token:MySqlToken):void 
 		{
 			dispatchEvent(new NetworkEvent(NetworkEvent.ERROR, null));
-			trace("Update error.");
+			trace("COMMUNICATIONS: Update error.");
 		}
 		
 		private function mysqlNearIDUpdateSuccess(data:Object, token:MySqlToken):void 
 		{
-			trace("Update success.");
+			trace("COMMUNICATIONS: Update success.");
 			dispatchEvent(new NetworkEvent(NetworkEvent.CONNECTED, netConnection.nearID));
 		}
 		
@@ -486,19 +509,19 @@ package sfxworks
 			
 			var t:MySqlToken = st.executeQuery();
 			t.addResponder(new AsyncResponder(nameChangeResponderSuccess, nameChangeResponderError, t));
-			trace("Name change triggered.");
+			trace("COMMUNICATIONS: Name change triggered.");
 		}
 		
 		private function nameChangeResponderSuccess(data:Object, token:MySqlToken):void
 		{
-			trace("Name change response success..");
+			trace("COMMUNICATIONS: Name change response success..");
 			_name = nameChangeRequest;
 			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.SUCCESS, data));
 		}
 		
 		private function nameChangeResponderError(info:Object, token:MySqlToken):void
 		{
-			trace("Name change response error:" + info);
+			trace("COMMUNICATIONS: Name change response error:" + info);
 			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, info));
 		}
 		
