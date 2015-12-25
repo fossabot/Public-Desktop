@@ -48,6 +48,7 @@ package sfxworks
 		private var _name:String;
 		private var _privateKey:ByteArray;
 		private var _publicKey:ByteArray;
+		private var _nearID:String;
 		
 		//Temps..
 		private var nameChangeRequest:String;
@@ -154,6 +155,11 @@ package sfxworks
 			groups[groupNames.indexOf(groupName)].writeRequestedObject(objectNumber, object);
 		}
 		
+		public function postToGroup(groupName:String, object:Object):void
+		{
+			groups[groupNames.indexOf(groupName)].post(object);
+		}
+		
 		public function getGroup(groupName:String):NetGroup
 		{
 			return groups[groupNames.indexOf(groupName)];
@@ -205,6 +211,7 @@ package sfxworks
 				case "NetConnection.Connect.Success":
 					trace("COMMUNICATIONS: Net connection successful. Init mysql connection.");
 					_myNetConnection = new NetStream(netConnection, NetStream.DIRECT_CONNECTIONS);
+					_nearID = netConnection.nearID;
 					mysql();
 					break; 
 				case "NetConnection.Connect.Closed":
@@ -496,6 +503,11 @@ package sfxworks
 		public function get myNetConnection():NetStream 
 		{
 			return _myNetConnection;
+		}
+		
+		public function get nearID():String 
+		{
+			return _nearID;
 		}
 		
 		public function nameChange(name:String):void

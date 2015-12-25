@@ -18,7 +18,7 @@
 -->
 <application xmlns="http://ns.adobe.com/air/application/17.0">
   <id>ProjectDesktop</id>
-  <versionNumber>0.29</versionNumber>
+  <versionNumber>0.30</versionNumber>
   <filename>ProjectDesktop</filename>
   <description>Beta of a desktop. Handles communication using peert to peer.</description>
   <name>ProjectDesktop</name>

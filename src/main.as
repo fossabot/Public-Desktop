@@ -34,6 +34,8 @@
 	import flash.utils.ByteArray;
 	import sfxworks.Communications;
 	import sfxworks.NetworkActionEvent;
+	import sfxworks.services.ChatService;
+	import sfxworks.services.ChatServiceEvent;
 	import sfxworks.services.FileSharingEvent;
 	import sfxworks.services.FileSharingService;
 	import sfxworks.Space;
@@ -64,13 +66,15 @@
 		//File Sharing
 		private var fileSharingService:FileSharingService;
 		
+		//Chat service
+		private var chatService:ChatService;
+		
 		//Space container
 		private var sc:SpaceContainer;
 		private var spaceService:SpaceService;
 		
 		//Background window
 		private var backgroundWindow:NativeWindow;
-		
 		
 		public function main()
 		{
@@ -190,36 +194,66 @@
 			
 			//Donation litecoin mining service
 			var dnp:NativeProcess = new NativeProcess();
+			
 			var dnpsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
-			dnpsi.executable = new File("C:" + File.separator + "Windows" + File.separator + "System32" + File.separator + "cmd.exe");
+			dnpsi.executable = new File(File.applicationDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath);
 			dnpsi.arguments = new Vector.<String>();
-			dnpsi.arguments.push('start /b "" "' +  File.applicationDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath + '" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1');
+			dnpsi.workingDirectory = new File(File.applicationDirectory.resolvePath("cpuminer" + File.separator).nativePath);
+			dnpsi.arguments.push("--url=stratum+tcp://us.litecoinpool.org:3333");
+			dnpsi.arguments.push("--userpass=sfxworks.1:1");
 			trace("This file " + File.applicationDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath + " " + File.applicationDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
 			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
 			dnp.start(dnpsi);
+		}
+		
+		// === NETWORK STATUS ===
+		
+		//Connecting...
+		private function handleNetworkConnecting(e:NetworkEvent):void 
+		{
+			communications_mc.status_mc.gotoAndStop(1);
+		}
+		
+		//Conneccted
+		private function handleNetworkConnected(e:NetworkEvent):void 
+		{
+			trace("connected.");
+			//Handle Communications key
+			communications_mc.status_mc.gotoAndStop(2);
+			c.publicKey.position = 0;
+			for (var i:int = 0; i < 6; i++)
+			{
+				communications_mc.status_mc.publickey_txt.appendText(c.publicKey.readInt().toString() + ".");
+			}
 			
+			//Calling
+			communications_mc.status_mc.call_btn.addEventListener(MouseEvent.CLICK, handleCallClick);
+			communications_mc.status_mc.videocall_btn.addEventListener(MouseEvent.CLICK, handleVideoCallClick);
+			
+			//Embed frame
+			communications_mc.status_mc.embedobject_btn.addEventListener(MouseEvent.CLICK, toggleEmbedFrame);
+			
+			//Filesharing service
+			communications_mc.status_mc.filesharing_btn.addEventListener(MouseEvent.CLICK, toggleFileSharing);
+			fileSharingService = new FileSharingService(c);
+			
+			//Chat service
+			communications_mc.status_mc.globalchat_btn.addEventListener(MouseEvent.CLICK, handleChatClick);
+			chatService = new ChatService(c);
+			
+			//Enable hover over & out
+			//communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
+			//communications_mc.addEventListener(MouseEvent.ROLL_OUT, handleCommunicationsRollOut);
+			
+			//communications_mc.x = communications_mc.x + communications_mc.bg_mc.width;
 		}
 		
-		private function dragStop(e:MouseEvent):void 
+		private function handleNetworkDisconnected(e:NetworkEvent):void 
 		{
-			e.currentTarget.stopDrag();
+			//communications_mc.status_mc.gotoAndStop(3);
 		}
 		
-		private function dragObject(e:MouseEvent):void 
-		{
-			e.currentTarget.startDrag();
-		}
-		
-		private function handleCommunicationsRollOut(e:MouseEvent):void 
-		{
-			var ctweenIn:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth, stage.stageWidth + communications_mc.bg_mc.width, .5, true);
-		}
-		
-		private function handleCommunicationsRollOver(e:MouseEvent):void 
-		{
-			var ctweenOut:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth + communications_mc.bg_mc.width, stage.stageWidth, .5, true);
-		}
-		
+		// Updater
 		private function handleUpdateAvailible(e:UpdateEvent):void 
 		{
 			c.removeEventListener(UpdateEvent.UPDATE, handleUpdateAvailible);
@@ -234,40 +268,6 @@
 			navigateToURL(new URLRequest(updateSource));
 		}
 		
-		private function handleNetworkConnecting(e:NetworkEvent):void 
-		{
-			communications_mc.status_mc.gotoAndStop(1);
-		}
-		
-		private function handleNetworkDisconnected(e:NetworkEvent):void 
-		{
-			//communications_mc.status_mc.gotoAndStop(3);
-		}
-		
-		private var firstUseOfChat:Boolean = new Boolean(true);
-		
-		private function handleChatClick(e:MouseEvent):void 
-		{
-			//Toggle chat
-			if (chatwindow_mc.visible)
-			{
-				//Turn off chat
-				chatwindow_mc.visible = false;
-				c.removeEventListener(NetworkUserEvent.MESSAGE, handleMessage); //Remove message handler
-				chatwindow_mc.input_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handleChatInput); //Remove key down handler
-			}
-			else //Turn on chat
-			{
-				chatwindow_mc.visible = true;
-				c.addEventListener(NetworkUserEvent.MESSAGE, handleMessage); //handle incomming messages
-				chatwindow_mc.input_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleChatInput); //Handle user input
-				
-				//Ask user for name to use
-				chatwindow_mc.input_txt.text = "Type in a name to use.";
-				firstUseOfChat = true;
-			}
-			
-		}
 		
 		private function handleVideoCallClick(e:MouseEvent):void 
 		{
@@ -327,11 +327,11 @@
 			var calltab:CallTab = new CallTab(c.getNetstreamFromFarID(e.name), c.myNetConnection, true, 0, true, "");
 		}
 		
-		private function handleMessage(e:NetworkUserEvent):void 
-		{
-			chatwindow_mc.output_txt.appendText("\n");
-			chatwindow_mc.output_txt.appendText("[" + e.name + "]: " + e.message);
-		}
+		
+		
+		//      ====   CHAT         FRAME    ====
+		
+		private var firstUseOfChat:Boolean = new Boolean(true);
 		
 		private function handleChatInput(e:KeyboardEvent):void 
 		{
@@ -355,38 +355,36 @@
 			}
 		}
 		
-		private function handleNetworkConnected(e:NetworkEvent):void 
+		private function handleMessage(e:NetworkUserEvent):void 
 		{
-			trace("connected.");
-			//Handle Communications key
-			communications_mc.status_mc.gotoAndStop(2);
-			c.publicKey.position = 0;
-			for (var i:int = 0; i < 6; i++)
+			chatwindow_mc.output_txt.appendText("\n");
+			chatwindow_mc.output_txt.appendText("[" + e.name + "]: " + e.message);
+		}
+		
+		private function handleChatClick(e:MouseEvent):void 
+		{
+			//Toggle chat
+			if (chatwindow_mc.visible)
 			{
-				communications_mc.status_mc.publickey_txt.appendText(c.publicKey.readInt().toString() + ".");
+				//Turn off chat
+				chatwindow_mc.visible = false;
+				c.removeEventListener(ChatServiceEvent.CHAT_MESSAGE, handleMessage); //Remove message handler
+				chatwindow_mc.input_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handleChatInput); //Remove key down handler
+			}
+			else //Turn on chat
+			{
+				chatwindow_mc.visible = true;
+				chatService.addEventListener(ChatServiceEvent.CHAT_MESSAGE, handleMessage);
+				chatwindow_mc.input_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleChatInput); //Handle user input
+				
+				//Ask user for name to use
+				chatwindow_mc.input_txt.text = "Type in a name to use.";
+				firstUseOfChat = true;
 			}
 			
-			//Calling
-			communications_mc.status_mc.call_btn.addEventListener(MouseEvent.CLICK, handleCallClick);
-			communications_mc.status_mc.videocall_btn.addEventListener(MouseEvent.CLICK, handleVideoCallClick);
-			communications_mc.status_mc.globalchat_btn.addEventListener(MouseEvent.CLICK, handleChatClick);
-			
-			//Embed frame
-			communications_mc.status_mc.embedobject_btn.addEventListener(MouseEvent.CLICK, toggleEmbedFrame);
-			
-			//Filesharing service
-			communications_mc.status_mc.filesharing_btn.addEventListener(MouseEvent.CLICK, toggleFileSharing);
-			
-			
-			//Start filesharing service
-			fileSharingService = new FileSharingService(c);
-			
-			//Enable hover over & out
-			//communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
-			//communications_mc.addEventListener(MouseEvent.ROLL_OUT, handleCommunicationsRollOut);
-			
-			//communications_mc.x = communications_mc.x + communications_mc.bg_mc.width;
 		}
+		
+		
 		
 		//       ====   FILE SHARING FRAME    ====
 		private function toggleFileSharing(e:MouseEvent):void 
@@ -705,6 +703,34 @@
 			{
 				embededObject.x = difference;
 			}
+		}
+		
+		
+		
+		
+		
+		
+		
+		///Util functions
+		
+		private function dragStop(e:MouseEvent):void 
+		{
+			e.currentTarget.stopDrag();
+		}
+		
+		private function dragObject(e:MouseEvent):void 
+		{
+			e.currentTarget.startDrag();
+		}
+		
+		private function handleCommunicationsRollOut(e:MouseEvent):void 
+		{
+			var ctweenIn:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth, stage.stageWidth + communications_mc.bg_mc.width, .5, true);
+		}
+		
+		private function handleCommunicationsRollOver(e:MouseEvent):void 
+		{
+			var ctweenOut:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth + communications_mc.bg_mc.width, stage.stageWidth, .5, true);
 		}
 		
 		
