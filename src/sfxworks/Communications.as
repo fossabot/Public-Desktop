@@ -38,10 +38,8 @@ package sfxworks
 	 */
 	public class Communications extends EventDispatcher
 	{
-		private var netConnection:NetConnection;
-		private var netConnections:Vector.<NetStream>;
+		private var _netConnection:NetConnection;
 		private var mysqlConnection:Connection;
-		private var _myNetConnection:NetStream;
 		
 		
 		//MyIdentity
@@ -72,11 +70,9 @@ package sfxworks
 		
 		
 		
-		
 		public function Communications() 
 		{
-			netConnection = new NetConnection();
-			netConnections = new Vector.<NetStream>();
+			_netConnection = new NetConnection();
 			_name = new String();
 			_privateKey = new ByteArray();
 			_publicKey = new ByteArray();
@@ -90,8 +86,8 @@ package sfxworks
 			
 			timerRefresh = new Timer(10000);
 			
-			netConnection.connect("rtmfp://p2p.rtmfp.net", "-");
-			netConnection.addEventListener(NetStatusEvent.NET_STATUS, handleNetworkStatus);
+			_netConnection.connect("rtmfp://p2p.rtmfp.net", "-");
+			_netConnection.addEventListener(NetStatusEvent.NET_STATUS, handleNetworkStatus);
 			/* Send objects
 			 * Send messages
 			 * Recieve Objects
@@ -124,10 +120,18 @@ package sfxworks
 		public function addGroup(groupName:String, groupSpecifier:GroupSpecifier):void
 		{
 			groupNames.push(groupName);
-			var netGroup:NetGroup = new NetGroup(netConnection, groupSpecifier.groupspecWithAuthorizations());
+			var netGroup:NetGroup = new NetGroup(_netConnection, groupSpecifier.groupspecWithAuthorizations());
 			groups.push(netGroup);
 			trace("COMMUNICATIONS: Attempting to add group "  + groupName);
 			trace("COMMUNICATIONS: Netgroup = " + netGroup);
+		}
+		
+		public function removeGroup(groupName:String):void
+		{
+			var toRemove:NetGroup = this.getGroup(groupName);
+			//Just remove from index since netconnection is the one that handles the event listeners
+			groupNames.splice(groups.indexOf(toRemove), 1);
+			groups.splice(groups.indexOf(toRemove), 1);
 		}
 		
 		public function addWantObject(groupName:String, startIndex:Number, endIndex:Number):void //Requests objects from the group.
@@ -210,12 +214,11 @@ package sfxworks
 			{ 
 				case "NetConnection.Connect.Success":
 					trace("COMMUNICATIONS: Net connection successful. Init mysql connection.");
-					_myNetConnection = new NetStream(netConnection, NetStream.DIRECT_CONNECTIONS);
-					_nearID = netConnection.nearID;
+					_nearID = _netConnection.nearID;
 					mysql();
 					break; 
 				case "NetConnection.Connect.Closed":
-					dispatchEvent(new NetworkEvent(NetworkEvent.DISCONNECTED, netConnection.nearID));
+					dispatchEvent(new NetworkEvent(NetworkEvent.DISCONNECTED, _netConnection.nearID));
 					break; 
 				case "NetConnection.Connect.Failed":
 					dispatchEvent(new NetworkEvent(NetworkEvent.ERROR, "none")); //Will be null on error
@@ -305,7 +308,7 @@ package sfxworks
 		{
 			this.removeEventListener(NetworkActionEvent.SUCCESS, makeCall);
 			var farNS:NetStream = getNetstreamFromFarID(e.info as String);
-			farNS.send("incommingcall", netConnection.nearID);
+			farNS.send("incommingcall", _netConnection.nearID);
 			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.CALLING, farNS.farID, "ring ring"));
 		}
 		
@@ -345,27 +348,6 @@ package sfxworks
 			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.INCOMMING_CALL, farid, "ring ring"));
 		}
 		
-		public function getNetstreamFromFarID(farid:String):NetStream
-		{
-			var returnNS:NetStream;
-			for each (var ns:NetStream in netConnections)
-			{
-				if (ns.farID == farid)
-				{
-					returnNS = ns;
-					break;
-				}
-			}
-			return returnNS;
-		}
-		
-		public function broadcast(message:String):void
-		{
-			for each (var ns:NetStream in netConnections)
-			{
-				ns.send("handleIncommingBroadcast", _name, message);
-			}
-		}
 		
 		private function handleIncommingBroadcast(user:String, message:String):void
 		{
@@ -401,7 +383,7 @@ package sfxworks
 				fs.close();
 				
 				st.sql = "UPDATE users "
-				+ "SET `nearid`='"+netConnection.nearID+"' "
+				+ "SET `nearid`='"+_netConnection.nearID+"' "
 				+ "WHERE `key`=?;";
 				st.setBinary(1, _privateKey);
 			}
@@ -418,7 +400,7 @@ package sfxworks
 				fs.close();
 				
 				st.sql = "INSERT INTO users (`name`, `nearid`, `key`, `publickey`)"
-					+ " VALUES ('"+File.userDirectory.name+"','"+netConnection.nearID+"',?,?);";
+					+ " VALUES ('"+File.userDirectory.name+"','"+_netConnection.nearID+"',?,?);";
 				st.setBinary(1, _privateKey);
 				st.setBinary(2, _publicKey);
 			}
@@ -477,7 +459,7 @@ package sfxworks
 		private function mysqlNearIDUpdateSuccess(data:Object, token:MySqlToken):void 
 		{
 			trace("COMMUNICATIONS: Update success.");
-			dispatchEvent(new NetworkEvent(NetworkEvent.CONNECTED, netConnection.nearID));
+			dispatchEvent(new NetworkEvent(NetworkEvent.CONNECTED, _netConnection.nearID));
 		}
 		
 		public function get privateKey():ByteArray 
@@ -500,14 +482,14 @@ package sfxworks
 			_name = value;
 		}
 		
-		public function get myNetConnection():NetStream 
-		{
-			return _myNetConnection;
-		}
-		
 		public function get nearID():String 
 		{
 			return _nearID;
+		}
+		
+		public function get netConnection():NetConnection 
+		{
+			return _netConnection;
 		}
 		
 		public function nameChange(name:String):void
