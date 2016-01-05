@@ -65,6 +65,8 @@
     <element path="src\org\bytearray" />
     <element path="src\org\bytearray\gif" />
     <element path="src\blooddy_crypto.swc" />
+    <element path="src\fzip.swc" />
+    <element path="src\coltware_airxzip_v1_0_1.swc" />
   </libraryPaths>
   <!-- External Libraries -->
   <externalLibraryPaths>
