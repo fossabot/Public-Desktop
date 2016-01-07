@@ -248,7 +248,15 @@ package sfxworks
 				case "NetGroup.Replication.Request": //When communications has the object and recieved a request for the object
 					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_REQUEST, groupNames[groups.indexOf(e.info.group)], null, e.info.index));
 					break;
+				case "NetGroup.SendTo.Notify":
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_RECIEVED, groupNames[groups.indexOf(e.info.group)], e.info.message));
+					break;
 			}
+		}
+		
+		public function groupSendToAll(groupName:String, object:Object):void
+		{
+			getGroup(groupName).sendToAllNeighbors(object);
 		}
 		
 		public function requestObject(publickey:ByteArray, args:String):void

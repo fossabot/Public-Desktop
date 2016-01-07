@@ -31,20 +31,23 @@ package sfxworks.services
 			objectToSend.name = c.name;
 			objectToSend.message = message;
 			
-			c.postToGroup(GLOBAL_CHAT_NAME, objectToSend);
+			c.groupSendToAll(GLOBAL_CHAT_NAME, objectToSend);
 		}
 		
 		private function handleGlobalSuccessfull(e:NetworkGroupEvent):void 
 		{
 			trace("CHAT SERVICE: Connected to " + GLOBAL_CHAT_NAME + " successfully.");
 			c.removeEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleGlobalSuccessfull);
-			c.addEventListener(NetworkGroupEvent.POST, handlePost);
+			c.addEventListener(NetworkGroupEvent.OBJECT_RECIEVED, handleObjectRecieved);
 		}
 		
-		private function handlePost(e:NetworkGroupEvent):void 
+		private function handleObjectRecieved(e:NetworkGroupEvent):void 
 		{
 			trace("CHAT SERVICE: Incomming post,");
-			dispatchEvent(new ChatServiceEvent(ChatServiceEvent.CHAT_MESSAGE, e.groupObject.nearid, e.groupObject.name, e.groupObject.message));
+			if (e.groupName == GLOBAL_CHAT_NAME)
+			{
+				dispatchEvent(new ChatServiceEvent(ChatServiceEvent.CHAT_MESSAGE, e.groupObject.nearid, e.groupObject.name, e.groupObject.message));
+			}
 		}
 		
 	}
