@@ -1,12 +1,18 @@
 package sfxworks.services 
 {
 	import flash.events.EventDispatcher;
+	import flash.events.NetStatusEvent;
 	import flash.events.TimerEvent;
+	import flash.filesystem.File;
+	import flash.filesystem.FileMode;
+	import flash.filesystem.FileStream;
 	import flash.media.Microphone;
 	import flash.net.GroupSpecifier;
 	import flash.net.NetStream;
+	import flash.utils.ByteArray;
 	import flash.utils.Timer;
 	import sfxworks.Communications;
+	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkGroupEvent;
 	/**
 	 * ...
@@ -21,15 +27,19 @@ package sfxworks.services
 		
 		private var currentGroup:String = new String();
 		private var currentGroupPassword:String = new String();
+		private var gspec:GroupSpecifier;
 		private var _username:String;
 		
-		private var senderNode:NetStream;
+		
+		private var publicNodeI:NetStream; //Used for sending to all groups
+		private var publicNodeO:NetStream;
+		
+		private var _senderNode:NetStream;
 		private var recieverNames:Vector.<String>;
 		private var recieverNodes:Vector.<NetStream>;
 		
 		//For calculating voice activity
 		private var t:Timer;
-		
 		
 		//Post "xyz left and xyz joined"
 		//xyz being their near id
@@ -37,10 +47,11 @@ package sfxworks.services
 		//c.publish(serviceName-voiceGroupName-audio)
 		//
 		
-		public function VoiceService(communications:Communications) 
-		{
+		public function VoiceService(communicactions:Communications) 
+		{			
 			c = communicactions;
 			_microphone = Microphone.getEnhancedMicrophone(); //Set mic to default | Echo cancellation
+			_microphone.setSilenceLevel(10);
 			username = new String(c.name);
 			
 			t = new Timer(500);
@@ -62,19 +73,35 @@ package sfxworks.services
 		
 		public function connectToGroup(name:String, password:String=""):void
 		{
-			var gspec:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + name + password);
-			gspec.postingEnabled = true;
-			
-			senderNode = new NetStream(c.netConnection, NetStream.DIRECT_CONNECTIONS); //Every time a new group is requested...
+			recieverNames = new Vector.<String>();
 			recieverNodes = new Vector.<NetStream>(); //it should garbage collect the old NetStreams..in theory
 			
 			currentGroupPassword = password;
 			
-			c.addGroup(SERVICE_NAME + name + password);
+			gspec = new GroupSpecifier(SERVICE_NAME + name + password);
+			gspec.postingEnabled = true;
+			gspec.multicastEnabled = true;
+			gspec.objectReplicationEnabled = true;
+			
+			c.addGroup(SERVICE_NAME + name + password, gspec);
 			c.addEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
-			c.addEventListener(NetworkGroupEvent.POST, handleGroupPost);
 		}
 		
+		//Handle disconnecting users (experimental)
+		private function handleNodeStatus(e:NetStatusEvent):void 
+		{
+			switch(e.info)
+			{
+				case "NetStream.Play.Stop":
+					//e.target = netestream
+					dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_DISCONNECTED, recieverNames[recieverNodes.indexOf(e.target)]));
+					recieverNames.splice(recieverNodes.indexOf(e.target), 1);
+					recieverNodes.splice(recieverNodes.indexOf(e.target), 1);	
+					break;
+			}
+		}
+		
+		//Handle self disconnecting
 		public function disconnectFromGroup():void
 		{
 			//Tell communications to remove from index
@@ -83,77 +110,93 @@ package sfxworks.services
 			//Remove from index
 			currentGroup = null;
 			currentGroupPassword = null;
-			senderNode = new NetStream(c.netConnection, NetStream.DIRECT_CONNECTIONS);
+			_senderNode = new NetStream(c.netConnection, NetStream.DIRECT_CONNECTIONS);
 			recieverNodes = new Vector.<NetStream>();
 		}
 		
-		//Used for handling joining / leaving peers
-		private function handleGroupPost(e:NetworkGroupEvent):void 
+		//Handle successful connection to group
+		private function handleSuccessfulGroupConnection(e:NetworkGroupEvent):void 
 		{
-			switch(e.groupObject.split(" ")[1])
+			c.removeEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
+			c.addEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulStreamConnection);
+			
+			_senderNode = new NetStream(c.netConnection, gspec.groupspecWithoutAuthorizations());
+			publicNodeI = new NetStream(c.netConnection, gspec.groupspecWithoutAuthorizations());
+			publicNodeO = new NetStream(c.netConnection, gspec.groupspecWithoutAuthorizations());
+			
+			currentGroup = e.groupName;
+			t.start();	
+		}
+		
+		
+		//Habdle stream connection from communications. IO handled for group ns
+		private function handleSuccessfulStreamConnection(e:NetworkActionEvent):void 
+		{
+			switch(e.info)
 			{
-				//            nearid        status    name
-				//Order weuhrweirewrqoehrqr joined quantomworks
-				case "joined":
-					//Recieving audio stream
-					var ns:NetStream = new NetStream(c.netConnection,e.groupObject.split(" ")[0]);
-					ns.play(SERVICE_NAME + currentGroup);
-					
-					//Index
-					recieverNames.push(e.groupObject.split(" ")[2]);
-					recieverNodes.push(ns);
-					
-					c.postToGroup(currentGroup, c.nearID + " exists " + _username);
-					dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_CONNECTED, e.groupObject.split(" ")[2]));
+				case publicNodeI:
+					trace("vs: Handling public node inbound");
+					var vsnc:VoiceServiceNodeClient = new VoiceServiceNodeClient();
+					publicNodeI.client = vsnc;
+					publicNodeI.play(SERVICE_NAME + currentGroup + currentGroupPassword);
+					vsnc.addEventListener(NodeEvent.INCOMMING_DATA, handleIncommingData);
 					break;
-				case "quit":
-					for each (var ns:NetStream in recieverNodes)
-					{
-						if (ns.farID == e.groupObject.split(" ")[0])
-						{
-							recieverNames.splice(recieverNodes.indexOf(ns), 1);
-							recieverNodes.splice(recieverNodes.indexOf(ns), 1);
-						}
-					}
-					dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_DISCONNECTED, e.groupObject.split(" ")[2]));
+				case publicNodeO:
+					trace("vs: Handling public node outbound");
+					publicNodeO.client = new VoiceServiceNodeClient();
+					publicNodeO.publish(SERVICE_NAME + currentGroup + currentGroupPassword);
+					publicNodeO.send("data", baToString(c.publicKey));
 					break;
-				case "namechange": //nearid namechange oldusername newusername
-					dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_NAMECHANGE, e.groupObject.split(" ")[2], e.groupObject.split(" ")[3]));
-					break;
-				case "exists":
-					var ns:NetStream = new NetStream(c.netConnection, e.groupObject.split(" ")[0]);
-					if (recieverNodes.indexOf(ns) == -1) //Only play and add if user isnt locally added by a join event or something of the sorts
-					{
-						ns.play(SERVICE_NAME + currentGroup);
-						recieverNames.push(e.groupObject.split(" ")[2]);
-						recieverNodes.push(ns);
-						dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_CONNECTED, e.groupObject.split(" ")[2]));
-					}
+				case _senderNode:
+					trace("vs: Handling sender node");
+					_senderNode.attachAudio(_microphone);
+					_senderNode.publish(baToString(c.publicKey));
 					break;
 			}
 		}
 		
-		private function handleSuccessfulGroupConnection(e:NetworkGroupEvent):void 
+		
+		//Handle incomming netstream data sent from O stream [Handle joining users]
+		private function handleIncommingData(e:NodeEvent):void 
 		{
-			senderNode = new NetStream(c.netConnection, NetStream.DIRECT_CONNECTIONS);
-			senderNode.attachAudio(microphone);
-			senderNode.publish(SERVICE_NAME + currentGroup);
+			trace("vs: Incomming data from public node " + e.data);
+			if (baToString(c.publicKey) != e.data && recieverNames.indexOf(e.data) != -1)
+			{
+				//If it cannot find the new connecting public key in itself or within its already listening nodes
+				
+				//Create and play the netstream
+				var ns:NetStream = new NetStream(c.netConnection, gspec.groupspecWithoutAuthorizations());
+				ns.addEventListener(NetStatusEvent.NET_STATUS, handleNodeStatus); //>Implying
+				ns.play(e.data);
+				
+				//Add to index
+				recieverNames.push(e.data);
+				recieverNodes.push(ns);
+				
+				//Announce publickey to group for the new user.
+				//Could do it for the user, but eh.
+				publicNodeO.send("data", baToString(c.publicKey));
+				
+				//TODO: Have it target the newcommer vs the entire group each node in the group doesnt have to listen to existing users.
+				//In the case scenario where theres 9034712192-85324952349572345-24957248975139847139856324056^3 connected users in a group
+				// V all to point of extinction type function
+				
+				//Optionally send name later on. Maybe include some sort of nam resolver
+				dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_CONNECTED, e.data as String));
+			}
 			
-			currentGroup = e.groupName;
-			c.postToGroup(currentGroup, c.nearID + " joined " + username); //Tell everyone in the group that you have arrived
-			//TODO: Switch to c.getgroup().sendToAllNeighbors since posting is not always guarenteed
 		}
 		
 		public function set microphone(value:Microphone):void 
 		{
 			if (currentGroup != null)
 			{
-				senderNode = new NetStream(c.netConnection, NetStream.DIRECT_CONNECTIONS);
+				_senderNode = new NetStream(c.netConnection, NetStream.DIRECT_CONNECTIONS);
 				//Reset microphone
-				senderNode.attachAudio(value);
+				_senderNode.attachAudio(value);
 				
 				//Republish netstream
-				senderNode.publish(SERVICE_NAME + currentGroup);
+				_senderNode.publish(baToString(c.publicKey));
 			}
 			
 			_microphone = value;
@@ -171,11 +214,25 @@ package sfxworks.services
 		
 		public function set username(value:String):void 
 		{
-			if (currentGroup != null)
-			{
-				c.postToGroup(currentGroup, c.nearID + " namechange " + _username + " " + value);
-			}
+			c.nameChange(value);
 			_username = value;
+		}
+		
+		public function get senderNode():NetStream 
+		{
+			return _senderNode;
+		}
+		
+		//Util
+		private function baToString(bytearray:ByteArray):String
+		{
+			var str:String = new String();
+			for (var i:int = 0; i < 6; i++)
+			{
+				trace("How many times");
+				str += bytearray.readInt().toString() + ".";
+			}
+			return str;
 		}
 		
 	}

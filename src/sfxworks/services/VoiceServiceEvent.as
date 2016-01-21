@@ -17,7 +17,7 @@ package sfxworks.services
 		private var _newName:String;
 		private var _bytes:Number;
 		
-		public function VoiceServiceEvent(type:String, name:String, newName:String = "", bytes:Number = null, bubbles:Boolean = false, cancelable:Boolean = false) 
+		public function VoiceServiceEvent(type:String, name:String, newName:String = "", bytes:Number = 0, bubbles:Boolean = false, cancelable:Boolean = false) 
 		{ 
 			super(type, bubbles, cancelable);
 			_name = name;
@@ -27,7 +27,7 @@ package sfxworks.services
 		
 		public override function clone():Event 
 		{ 
-			return new VoiceServiceEvent(type, _name, _newName, bubbles, cancelable);
+			return new VoiceServiceEvent(type, _name, _newName, _bytes, bubbles, cancelable);
 		} 
 		
 		public override function toString():String 

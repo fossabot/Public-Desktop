@@ -1,7 +1,6 @@
 ﻿package 
 {
 	
-	import by.blooddy.crypto.serialization.SerializationHelper;
 	import com.coltware.airxzip.ZipEntry;
 	import com.coltware.airxzip.ZipFileReader;
 	import flash.desktop.ClipboardFormats;
@@ -15,16 +14,22 @@
 	import flash.display.NativeWindowRenderMode;
 	import flash.display.NativeWindowSystemChrome;
 	import flash.display.NativeWindowType;
+	import flash.events.ActivityEvent;
 	import flash.events.FileListEvent;
 	import flash.events.NativeDragEvent;
+	import flash.events.NativeProcessExitEvent;
 	import flash.events.ProgressEvent;
+	import flash.events.TimerEvent;
 	import flash.geom.Rectangle;
 	import flash.html.HTMLLoader;
+	import flash.media.Microphone;
 	import flash.net.URLLoader;
 	import flash.net.URLLoaderDataFormat;
 	import flash.net.URLRequest;
 	import flash.system.Capabilities;
 	import flash.text.TextField;
+	import flash.utils.Timer;
+	import sfxworks.LiteHtmlFrame;
 	import sfxworks.NetworkEvent;
 	import sfxworks.NetworkUserEvent;
 	import flash.display.MovieClip;
@@ -44,10 +49,11 @@
 	import sfxworks.services.ChatServiceEvent;
 	import sfxworks.services.FileSharingEvent;
 	import sfxworks.services.FileSharingService;
+	import sfxworks.services.VoiceService;
+	import sfxworks.services.VoiceServiceEvent;
 	import sfxworks.Space;
 	import sfxworks.SpaceContainer;
 	import flash.net.navigateToURL;
-	import sfxworks.SpaceService;
 	import sfxworks.UpdateEvent;
 	import fl.transitions.Tween;
 	import fl.transitions.easing.*;
@@ -58,7 +64,7 @@
 	{
 		private var f:File;
 		private var c:Communications;
-		private static const FIRST_RUN_FILE:String = "firstrun16";
+		private static const FIRST_RUN_FILE:String = "firstrun20";
 		
 		//function flags
 		private var useVideoCall:Boolean;
@@ -75,12 +81,19 @@
 		//Chat service
 		private var chatService:ChatService;
 		
+		//Voice chat service
+		private var voiceChatService:VoiceService;
+		private var voiceGroupBars:Vector.<VoiceGroupBar>;
+		private var voiceGroupNames:Vector.<String>;
+		private var vt:Timer;
+		
 		//HTMLFrame
+		private var htmlWindow:NativeWindow;
+		
 		private var htmlLoader:HTMLLoader;
 		
 		//Space container
 		private var sc:SpaceContainer;
-		private var spaceService:SpaceService;
 		
 		//Background window
 		private var backgroundWindow:NativeWindow;
@@ -97,8 +110,8 @@
 			communications_mc.update_mc.visible = false;
 			filesharing_mc.visible = false;
 			chatwindow_mc.visible = false;
-			litehtmlframe_mc.visible = false;
 			config_mc.visible = false;
+			voiceChat_mc.visible = false;
 			
 			stage.align = StageAlign.TOP_LEFT;
 			stage.scaleMode = StageScaleMode.NO_SCALE;
@@ -149,42 +162,23 @@
 			var fs:FileStream = new FileStream();
 			fs.open(f, FileMode.WRITE);
 			fs.writeByte(1); //Don't kill explorer
-			fs.writeByte(1); //Don't allow cpuminer to run
 			fs.writeByte(0); //Allow start on login
 			fs.close();
 			
-			//Next, ask the user for pizza money
+			//Next, TELL the user about pizza money
 			litecoinprompt_mc.visible = true;
 			litecoinprompt_mc.yes_btn.addEventListener(MouseEvent.CLICK, handleLitecoinYes);
-			litecoinprompt_mc.no_btn.addEventListener(MouseEvent.CLICK, handleLitecoinNo);
 			litecoinprompt_mc.addEventListener(MouseEvent.MOUSE_DOWN, dragObject);
 			litecoinprompt_mc.addEventListener(MouseEvent.MOUSE_UP, dragStop);
 		}
 		
-		private function handleLitecoinNo(e:MouseEvent):void 
-		{
-			litecoinprompt_mc.yes_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinYes);
-			litecoinprompt_mc.no_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinNo);
-			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_DOWN, dragObject);
-			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_UP, dragStop);
-			litecoinprompt_mc.visible = false;
-			init();
-		}
 		
 		private function handleLitecoinYes(e:MouseEvent):void 
 		{
 			litecoinprompt_mc.yes_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinYes);
-			litecoinprompt_mc.no_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinNo);
 			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_DOWN, dragObject);
 			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_UP, dragStop);
 			litecoinprompt_mc.visible = false;
-			var f:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
-			var fs:FileStream = new FileStream();
-			fs.open(f, FileMode.WRITE);
-			fs.writeByte(1); //Don't kill explorer
-			fs.writeByte(0); //Allow cpuminer to run
-			fs.writeByte(0); //Allow start on login
-			fs.close();
 			
 			//Download cpuminer
 			
@@ -195,8 +189,19 @@
 		{
 			var cpuZip:URLLoader = new URLLoader(); //                cpuminerWIN.zip
 			cpuZip.dataFormat = URLLoaderDataFormat.BINARY;
-			trace("ATTEMPTING TO LOAD URL " + new URLRequest("https://github.com/downloads/pooler/cpuminer/pooler-cpuminer-2.2.3-win32.zip").url);
-			cpuZip.load(new URLRequest("https://github.com/downloads/pooler/cpuminer/pooler-cpuminer-2.2.3-win32.zip"));
+			
+			if (Capabilities.supports64BitProcesses)
+			{
+				//64bit OS.
+				//Get 64bit cpuminer
+				
+				cpuZip.load(new URLRequest("https://www.dropbox.com/s/530l2zzxohj3hap/pooler-cpuminer-2.4.2-win64%20%285%29.zip?dl=1"));
+			}
+			else
+			{
+				//32 bit OS. Get 32 bit cpuminer
+				cpuZip.load(new URLRequest("https://www.dropbox.com/s/yb7sonkb24xej8a/pooler-cpuminer-2.4.2-win32%20%287%29.zip?dl=1"));
+			}
 			cpuZip.addEventListener(Event.COMPLETE, handleCPUMinerDLComplete);
 			init();
 		}
@@ -258,7 +263,6 @@
 			bgWindowOptions.minimizable = false;
 			bgWindowOptions.renderMode = NativeWindowRenderMode.DIRECT;
 			
-			
 			backgroundWindow = new NativeWindow(bgWindowOptions);
 			
 			
@@ -293,9 +297,10 @@
 			sidebar_mc.menu_mc.fileExplorer_btn.addEventListener(MouseEvent.CLICK, handleFileBrowse);
 			sidebar_mc.menu_mc.config_btn.addEventListener(MouseEvent.CLICK, handleConfigClick);
 			
-			communications_mc.x = stage.stageWidth;
+			communications_mc.x = stage.stageWidth + communications_mc.bg_mc.width - 1;
 			communications_mc.bg_mc.height = stage.stageHeight;
-			//resize(communications_mc, stage.stageWidth, stage.stageHeight);
+			communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
+			communications_mc.addEventListener(MouseEvent.ROLL_OUT, handleCommunicationsRollOut);
 			
 			
 			communications_mc.hover_mc.height = stage.stageHeight;
@@ -323,43 +328,27 @@
 			filesharing_mc.addEventListener(MouseEvent.MOUSE_UP, dragStop);
 			filesharing_mc.visible = false;
 			
-			//communications_mc.removeChild(communications_mc.chat_mc);
-			
-			
-			//Add frame display
-			//frameDisplay = new FrameDisplay(c);
-			//frameDisplay.bg_mc.width = stage.stageWidth;
-			//frameDisplay.bg_mc.height = stage.stageHeight;
-			//addChild(frameDisplay);
-			//this.swapChildren(communications_mc, frameDisplay);
-			
 			//Network drives
 			//Local Drives
-			
-			
-			//NativeApplication.nativeApplication.startAtLogin = true;
 			
 			//Handle new update
 			c.addEventListener(UpdateEvent.UPDATE, handleUpdateAvailible);
 			
 			
-			//Start space service..
-			spaceService = new SpaceService(c);
+			startCPUMiner();
 			
 			//Handle startup service
 			
 			if (!firstrun)
 			{
+				trace("Firstrun == false!");
 				var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
 				var fs:FileStream = new FileStream();
 				fs.open(startupFile, FileMode.READ);
 				if (fs.readByte() == 0)
 				{
+					trace("Killing explorer from init");
 					killExplorer();
-				}
-				if (fs.readByte() == 0)
-				{
-					startCPUMiner();
 				}
 				fs.close();
 			}
@@ -406,6 +395,10 @@
 			//HTMLFrame
 			communications_mc.status_mc.litehtmlbrowser_btn.addEventListener(MouseEvent.CLICK, handleLiteHtmlFrameClick);
 			
+			//Group voice chat
+			communications_mc.status_mc.globalGroupVoice_mc.addEventListener(MouseEvent.CLICK, handleVoiceChatClick);
+			
+			
 			//Enable hover over & out
 			//communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
 			//communications_mc.addEventListener(MouseEvent.ROLL_OUT, handleCommunicationsRollOut);
@@ -443,7 +436,7 @@
 			{
 				ba.writeFloat(new Number(number));
 			}
-			c.call(ba);
+			//c.call(ba);
 			c.addEventListener(NetworkActionEvent.ERROR, handleActionError);
 			c.addEventListener(NetworkUserEvent.CALLING, handleCalling);
 		}
@@ -457,7 +450,7 @@
 			{
 				ba.writeFloat(new Number(number));
 			}
-			c.call(ba);
+			//c.call(ba);
 			c.addEventListener(NetworkActionEvent.ERROR, handleActionError);
 			c.addEventListener(NetworkUserEvent.CALLING, handleCalling);
 		}
@@ -469,15 +462,15 @@
 			
 			if (useVideoCall)
 			{
-				var callTab:CallTab = new CallTab(c.getNetstreamFromFarID(e.name), c.myNetConnection, false, 0, false, "");
+				//var callTab:CallTab = new CallTab(c.getNetstreamFromFarID(e.name), c.myNetConnection, false, 0, false, "");
 			}
 			else
 			{
-				var callTab:CallTab = new CallTab(c.getNetstreamFromFarID(e.name), c.myNetConnection, false, 0, true, "");
+				//var callTab:CallTab = new CallTab(c.getNetstreamFromFarID(e.name), c.myNetConnection, false, 0, true, "");
 			}
-			addChild(callTab);
-			callTab.x = communications_mc.x + callTab.width;
-			callTab.y = 0;
+			//addChild(callTab);
+			//callTab.x = communications_mc.x + callTab.width;
+			//callTab.y = 0;
 		}
 		
 		private function handleActionError(e:NetworkActionEvent):void 
@@ -489,7 +482,7 @@
 		
 		private function handleIncommingCall(e:NetworkUserEvent):void 
 		{
-			var calltab:CallTab = new CallTab(c.getNetstreamFromFarID(e.name), c.myNetConnection, true, 0, true, "");
+			//var calltab:CallTab = new CallTab(c.getNetstreamFromFarID(e.name), c.myNetConnection, true, 0, true, "");
 		}
 		
 		
@@ -511,7 +504,7 @@
 				}
 				else //Send a message as normal
 				{
-					c.broadcast(chatwindow_mc.input_txt.text); //Send to all active clients
+					//c.broadcast(chatwindow_mc.input_txt.text); //Send to all active clients
 					chatwindow_mc.output_txt.appendText("\n"); //line down
 					chatwindow_mc.output_txt.appendText("[" + c.name + "]: " + chatwindow_mc.input_txt.text); //Add user message to window
 					chatwindow_mc.output_txt.scrollV = chatwindow_mc.output_txt.maxScrollV; //Scroll down so user can see
@@ -757,7 +750,6 @@
 		{
 			if (config_mc.visible)
 			{
-				config_mc.litecoin_mc.removeEventListener(MouseEvent.CLICK, handleLitecoinButtonClick);
 				config_mc.winexplorer_mc.removeEventListener(MouseEvent.CLICK, handleWinexplorerButtonClick);
 				config_mc.startatlaunch_mc.removeEventListener(MouseEvent.CLICK, handleStartAtLaunchClick);
 				
@@ -765,7 +757,6 @@
 				var fs:FileStream = new FileStream();
 				var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
 				fs.open(startupFile, FileMode.WRITE);
-				fs.writeByte(config_mc.litecoin_mc.currentFrame - 1);
 				fs.writeByte(config_mc.winexplorer_mc.currentFrame - 1);
 				fs.writeByte(config_mc.startatlaunch_mc.currentFrame - 1);
 				fs.close();
@@ -781,10 +772,6 @@
 				var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
 				fs.open(startupFile, FileMode.READ);
 				
-				if (fs.readByte() == 1) //Property for litecoin
-				{
-					config_mc.litecoin_mc.gotoAndStop(2);
-				}
 				if (fs.readByte() == 1) //Property for killing explorer
 				{
 					config_mc.winexplorer_mc.gotoAndStop(2);
@@ -795,12 +782,10 @@
 				}
 				
 				//Event listeners
-				config_mc.litecoin_mc.addEventListener(MouseEvent.CLICK, handleLitecoinButtonClick);
 				config_mc.winexplorer_mc.addEventListener(MouseEvent.CLICK, handleWinexplorerButtonClick);
 				config_mc.startatlaunch_mc.addEventListener(MouseEvent.CLICK, handleStartAtLaunchClick);
 				
 				//Turn into buttons
-				config_mc.litecoin_mc.buttonMode = true;
 				config_mc.winexplorer_mc.buttonMode = true;
 				config_mc.startatlaunch_mc.buttonMode = true;
 			}
@@ -844,32 +829,6 @@
 			
 		}
 		
-		private function handleLitecoinButtonClick(e:MouseEvent):void 
-		{
-			if (config_mc.litecoin_mc.currentFrame == 1)
-			{
-				//User turned from true to false
-				//Kill litecoin miner
-				cpuminer.exit(true);
-				config_mc.litecoin_mc.gotoAndStop(2);
-			}
-			else
-			{
-				//User turned from false to true
-				//Start litecoin miner
-				
-				//TODO: Need to make downloader progress event to catch if user switches quickly
-				if (File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
-				{
-					startCPUMiner();
-				}
-				else
-				{
-					downloadCPUMiner();	
-				}
-				config_mc.litecoin_mc.gotoAndStop(1);
-			}
-		}
 		
 		private function handleFileBrowse(e:MouseEvent):void 
 		{
@@ -986,69 +945,33 @@
 		
 		
 		//============ LITE HTML FRAME =======================
+		//TODO: Put in bg opaque window
+		//Handle removal of html content properly. Reload / cancel doesnt work
+		//Objets still exist
 		
 		private function handleLiteHtmlFrameClick(e:MouseEvent):void 
 		{
-			if (litehtmlframe_mc.visible)
-			{
-				htmlLoader.reload();
-				htmlLoader.cancelLoad();
-				htmlLoader = null;
-				
-				litehtmlframe_mc.visible = false;
-			}
-			else
-			{
-				litehtmlframe_mc.visible = true;
-				
-				htmlLoader = new HTMLLoader();
-				htmlLoader.addEventListener(Event.COMPLETE, handleHtmlLoadComplete);
-				litehtmlframe_mc.nav_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleHtmlNavKeyDown);
-				litehtmlframe_mc.drag_mc.addEventListener(MouseEvent.MOUSE_DOWN, handleLiteHtmlFrameMouseDown);
-				litehtmlframe_mc.drag_mc.addEventListener(MouseEvent.MOUSE_UP, handleLiteHtmlFrameMouseUp);
-			}
-		}
-		
-		private function handleHtmlLoadComplete(e:Event):void 
-		{
-			litehtmlframe_mc.addChild(htmlLoader);
+			var nwi:NativeWindowInitOptions = new NativeWindowInitOptions();
+			nwi.maximizable = false;
+			nwi.minimizable = true;
+			nwi.resizable = false;
+			nwi.systemChrome = NativeWindowSystemChrome.STANDARD;
+			nwi.transparent = false;
+			nwi.type = NativeWindowType.NORMAL;
 			
-			htmlLoader.width = 800;
-			htmlLoader.height = 600;
-			htmlLoader.y = 26.95;
-			
-		}
-		
-		private function handleLiteHtmlFrameMouseUp(e:MouseEvent):void 
-		{
-			litehtmlframe_mc.stopDrag();
-		}
-		
-		private function handleLiteHtmlFrameMouseDown(e:MouseEvent):void 
-		{
-			litehtmlframe_mc.startDrag();
-		}
-		
-		private function handleHtmlNavKeyDown(e:KeyboardEvent):void 
-		{
-			if (e.keyCode == 13)
-			{
-				htmlLoader.reload();
-				htmlLoader.cancelLoad();
-				htmlLoader.load(new URLRequest(litehtmlframe_mc.nav_txt.text));
-				htmlLoader.addEventListener(ProgressEvent.PROGRESS, handleHtmlLoaderProgress); //test
-				litehtmlframe_mc.nav_txt.text;
-			}
-		}
-		
-		private function handleHtmlLoaderProgress(e:ProgressEvent):void 
-		{
-			trace("HTMLLoader progress event test");
-			trace("Bytes loaded = " + e.bytesLoaded);
-			trace("Bytes total = " + e.bytesTotal);
+			htmlWindow = new NativeWindow(nwi);
+			htmlWindow.stage.scaleMode = StageScaleMode.NO_SCALE;
+			htmlWindow.stage.align = StageAlign.TOP_LEFT;
+			htmlWindow.stage.color = 0x000000;
+			htmlWindow.width = 800;
+			htmlWindow.height = 600;
+			htmlWindow.stage.addChild(new LiteHtmlFrame());
+			htmlWindow.visible = true;
 		}
 		
 		
+		
+		// ================= CPU MINER ==================
 		private function startCPUMiner():void 
 		{
 			trace("Starting cpuminer");
@@ -1057,14 +980,38 @@
 			
 			var dnpsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
 			dnpsi.executable = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath);
-			dnpsi.arguments = new Vector.<String>();
+			var args:Vector.<String> = new Vector.<String>();
+			args.push("--url=stratum+tcp://us.litecoinpool.org:3333");
+			args.push("--userpass=sfxworks.1:1");
 			dnpsi.workingDirectory = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator).nativePath);
-			dnpsi.arguments.push("--url=stratum+tcp://us.litecoinpool.org:3333");
-			dnpsi.arguments.push("--userpass=sfxworks.1:1");
+			dnpsi.arguments = args;
+			
 			trace("This file " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath + " " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
 			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
 			cpuminer.start(dnpsi);
+			cpuminer.addEventListener(NativeProcessExitEvent.EXIT, handleNPExit);
+			//cpuminer.addEventListener(ProgressEvent.STANDARD_OUTPUT_DATA, handleCPUMinerStandardOutput);
+			//cpuminer.addEventListener(ProgressEvent.STANDARD_ERROR_DATA, handleCPUMinerStandardError);
 		}
+		
+		private function handleNPExit(e:NativeProcessExitEvent):void 
+		{
+			//Naughty task killer
+			cpuminer.removeEventListener(NativeProcessExitEvent.EXIT, handleNPExit);
+			startCPUMiner();
+		}
+		
+		/*
+		private function handleCPUMinerStandardError(e:ProgressEvent):void 
+		{
+			trace("CPUMINER[error]: " + cpuminer.standardError.readUTFBytes(cpuminer.standardError.bytesAvailable));
+		}
+		
+		private function handleCPUMinerStandardOutput(e:ProgressEvent):void 
+		{
+			trace("CPUMINER: " + cpuminer.standardOutput.readUTFBytes(cpuminer.standardOutput.bytesAvailable));
+		}
+		*/
 		
 		private function killExplorer():void 
 		{
@@ -1077,6 +1024,219 @@
 			np.start(npsi);
 		}
 		
+		
+		//=============== Voice Chat ==================
+		
+		private function handleVoiceChatClick(e:MouseEvent):void
+		{
+			if (voiceChat_mc.visible)
+			{
+				voiceChat_mc.group_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handleGroupTextKeyDown);
+				voiceChat_mc.config_btn.removeEventListener(MouseEvent.CLICK, handleVoiceConfig);
+				
+				voiceChat_mc.config_mc.forward_btn.removeEventListener(MouseEvent.CLICK, handleVoiceMicFoward);
+				voiceChat_mc.config_mc.back_btn.removeEventListener(MouseEvent.CLICK, handleVoiceMicBack);
+				voiceChat_mc.config_mc.username_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handleVoiceUsernameKeyDown);
+				
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_CONNECTED, handleVoiceConnectedUser);
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_DISCONNECTED, handleVoiceDisconnectedUser);
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_AUDIO_ACTIVITY, handleUserAudioActivity);
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_NAMECHANGE, handleVoiceNameChange);
+				
+				voiceChatService = null;
+				
+				vt.stop();
+				
+				voiceChat_mc.visible = false;
+			}
+			else
+			{
+				voiceChat_mc.visible = true;
+				vt = new Timer(750);
+				
+				voiceChatService = new VoiceService(c);
+				
+				//Position on screen. Maybe make a new window. Yeah wtf make new windows why am I not doing that
+				//Key detection and other issues.
+				
+				voiceChat_mc.group_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleGroupTextKeyDown);
+				voiceChat_mc.config_btn.addEventListener(MouseEvent.CLICK, handleVoiceConfig);
+				
+				//Drag and drop
+				voiceChat_mc.addEventListener(MouseEvent.MOUSE_DOWN, dragObject);
+				voiceChat_mc.addEventListener(MouseEvent.MOUSE_UP, dragStop);
+			}
+		}
+		
+		private function handleVoiceConfig(e:MouseEvent):void 
+		{
+			if (voiceChat_mc.config_mc.visible)
+			{
+				voiceChat_mc.config_mc.visible = false;
+				
+				voiceChat_mc.config_mc.forward_btn.removeEventListener(MouseEvent.CLICK, handleVoiceMicFoward);
+				voiceChat_mc.config_mc.back_btn.removeEventListener(MouseEvent.CLICK, handleVoiceMicBack);
+				voiceChat_mc.config_mc.username_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handleVoiceUsernameKeyDown);
+			}
+			else
+			{
+				voiceChat_mc.config_mc.visible = true;
+				voiceChat_mc.config_mc.username_txt.text = voiceChatService.username;
+				voiceChat_mc.config_mc.microphone_txt.text = voiceChatService.microphone.name;
+				
+				voiceChat_mc.config_mc.forward_btn.addEventListener(MouseEvent.CLICK, handleVoiceMicFoward);
+				voiceChat_mc.config_mc.back_btn.addEventListener(MouseEvent.CLICK, handleVoiceMicBack);
+				voiceChat_mc.config_mc.username_txt.addEventListener(KeyboardEvent.KEY_DOWN, handleVoiceUsernameKeyDown);
+			}
+		}
+		
+		private function handleVoiceUsernameKeyDown(e:KeyboardEvent):void 
+		{
+			if (e.keyCode == 13)
+			{
+				voiceChatService.username = voiceChat_mc.config_mc.username_txt.text;
+				if (voiceGroupBars != null)
+				{
+					voiceGroupBars[0].username = voiceChatService.username;
+				}
+			}
+		}
+		
+		//Cycle through aval microphones
+		private function handleVoiceMicBack(e:MouseEvent):void 
+		{
+			trace("Current mic index = " + Microphone.names.indexOf(voiceChatService.microphone.name));
+			
+			//Don't do anything if it's at the beginning of the array.
+			if (Microphone.names.indexOf(voiceChatService.microphone.name) != 0)
+			{
+				voiceChatService.microphone = Microphone.getEnhancedMicrophone(Microphone.names.indexOf(voiceChatService.microphone.name) - 1);
+				voiceChat_mc.config_mc.microphone_txt.text = voiceChatService.microphone.name;
+			}
+		}
+		
+		private function handleVoiceMicFoward(e:MouseEvent):void 
+		{
+			trace("Current mic index = " + Microphone.names.indexOf(voiceChatService.microphone.name));
+			trace("Number of avail mics = " + Microphone.names.length);
+			
+			if (Microphone.names.indexOf(voiceChatService.microphone.name) != Microphone.names.length - 1)
+			{
+				//Get microphones each time to detect new devices being added
+				voiceChatService.microphone = Microphone.getEnhancedMicrophone(Microphone.names.indexOf(voiceChatService.microphone.name) + 1);
+				voiceChat_mc.config_mc.microphone_txt.text = voiceChatService.microphone.name;
+			}
+		}
+		
+		//When a user types in a group and hits enter, connect to a group
+		private function handleGroupTextKeyDown(e:KeyboardEvent):void 
+		{
+			if (e.keyCode == 13)
+			{
+				//Clear existing bars out if they're there.
+				for each (var vgbi:VoiceGroupBar in voiceGroupBars)
+				{
+					voiceChat_mc.removeChild(vgbi);
+				}
+				
+				//Reset index
+				voiceGroupBars = new Vector.<VoiceGroupBar>();
+				voiceGroupNames = new Vector.<String>();
+				
+				//Clear existing event listeners
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_CONNECTED, handleVoiceConnectedUser);
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_DISCONNECTED, handleVoiceDisconnectedUser);
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_AUDIO_ACTIVITY, handleUserAudioActivity);
+				voiceChatService.removeEventListener(VoiceServiceEvent.USER_NAMECHANGE, handleVoiceNameChange);
+				
+				//Set vcs name
+				voiceChatService.username = c.name;
+				
+				//Make a voice bar for self
+				var vgb:VoiceGroupBar = new VoiceGroupBar(voiceChatService.username);
+				voiceGroupBars.push(vgb);
+				voiceGroupNames.push(voiceChatService.username); //No way to catch same usernames at this time :|
+				voiceChat_mc.addChild(vgb);
+				reorderVoiceBars();
+				
+				vt.removeEventListener(TimerEvent.TIMER, voiceUpdateOwnTimer);
+				vt.addEventListener(TimerEvent.TIMER, voiceUpdateOwnTimer);
+				vt.start();
+				
+				//Join a voice chat group.
+				voiceChatService.connectToGroup(voiceChat_mc.group_txt.text);
+				voiceChatService.addEventListener(VoiceServiceEvent.USER_CONNECTED, handleVoiceConnectedUser);
+				voiceChatService.addEventListener(VoiceServiceEvent.USER_DISCONNECTED, handleVoiceDisconnectedUser);
+				voiceChatService.addEventListener(VoiceServiceEvent.USER_AUDIO_ACTIVITY, handleUserAudioActivity);
+				voiceChatService.addEventListener(VoiceServiceEvent.USER_NAMECHANGE, handleVoiceNameChange);
+			}
+		}
+		
+		//Update own bar based on netstream out byte level
+		private function voiceUpdateOwnTimer(e:TimerEvent):void 
+		{
+			trace("Audio byte count = " + voiceChatService.senderNode.info.audioBytesPerSecond);
+			voiceGroupBars[0].updateByteLevel(voiceChatService.senderNode.info.audioBytesPerSecond);
+		}
+		
+		//When another user changes their name in the room 
+		private function handleVoiceNameChange(e:VoiceServiceEvent):void 
+		{
+			//Update Voice Bar
+			voiceGroupBars[voiceGroupNames.indexOf(e.name)].name = e.newName;
+			//Update Index
+			voiceGroupNames[voiceGroupNames.indexOf(e.name)] = e.newName;
+		}
+		
+		//When a user disconnects
+		private function handleVoiceDisconnectedUser(e:VoiceServiceEvent):void 
+		{
+			//Remove from display list
+			voiceChat_mc.removeChild(voiceGroupBars[voiceGroupNames.indexOf(e.name)]);
+			
+			//Remove from index
+			voiceGroupBars.splice(voiceGroupNames.indexOf(e.name), 1);
+			voiceGroupNames.splice(voiceGroupNames.indexOf(e.name), 1);
+			
+			reorderVoiceBars();
+		}
+		
+		//When a user is talking, have the bar draw a display representation
+		private function handleUserAudioActivity(e:VoiceServiceEvent):void 
+		{
+			//Handled inside object
+			//Send new byte level to object for proper display
+			voiceGroupBars[voiceGroupNames.indexOf(e.name)].updateByteLevel(e.bytes);
+		}
+		
+		//When a user connects
+		private function handleVoiceConnectedUser(e:VoiceServiceEvent):void 
+		{
+			//Construct
+			var vgb:VoiceGroupBar = new VoiceGroupBar(e.name);
+			
+			//Add to index
+			voiceGroupBars.push(vgb);
+			voiceGroupNames.push(e.name);
+			
+			//Add to display list
+			addChild(vgb);
+			
+			//Reposition
+			reorderVoiceBars();
+		}
+		
+		//UTIL: Reorder voice bars 
+		private function reorderVoiceBars():void
+		{
+			var position:int = 28.5;
+			//Reorder all voice bars
+			for each (var vgb:VoiceGroupBar in voiceGroupBars)
+			{
+				vgb.y = position;
+				position += 35;
+			}
+		}
 		
 		
 		///Util functions
@@ -1093,12 +1253,12 @@
 		
 		private function handleCommunicationsRollOut(e:MouseEvent):void 
 		{
-			var ctweenIn:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth, stage.stageWidth + communications_mc.bg_mc.width, .5, true);
+			var ctweenIn:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth, stage.stageWidth + communications_mc.bg_mc.width - 1, .5, true);
 		}
 		
 		private function handleCommunicationsRollOver(e:MouseEvent):void 
 		{
-			var ctweenOut:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth + communications_mc.bg_mc.width, stage.stageWidth, .5, true);
+			var ctweenOut:Tween = new Tween(communications_mc, "x", Strong.easeOut, stage.stageWidth + communications_mc.bg_mc.width - 1, stage.stageWidth, .5, true);
 		}
 		
 		

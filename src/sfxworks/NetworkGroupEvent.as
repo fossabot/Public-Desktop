@@ -13,6 +13,9 @@ package sfxworks
 		public static const POST:String = "ngpost";
 		public static const OBJECT_RECIEVED:String = "ngobjectRecieved";
 		public static const OBJECT_REQUEST:String = "ngobjectRequest";
+		public static const USER_DATA:String = "ngeuserdata";
+		public static const PUBLISH_START:String = "ngepublishstart";
+		public static const PUBLISH_END:String = "ngepublishend";
 		
 		private var _groupName:String;
 		private var _groupObject:Object; //info.message or shared group object

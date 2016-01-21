@@ -1,7 +1,10 @@
 package sfxworks 
 {
+	import adobe.utils.CustomActions;
 	import air.net.URLMonitor;
+	import away3d.loaders.misc.AssetLoaderToken;
 	import com.maclema.mysql.Connection;
+	import com.maclema.mysql.events.MySqlErrorEvent;
 	import com.maclema.mysql.MySqlToken;
 	import com.maclema.mysql.ResultSet;
 	import com.maclema.mysql.Statement;
@@ -68,6 +71,9 @@ package sfxworks
 		private var groups:Vector.<NetGroup>;
 		private var groupNames:Vector.<String>;
 		
+		//Mysql Group Management: For netstream groups, registered to the database
+		private var nsGroupNames:Vector.<String>;
+		
 		
 		
 		public function Communications() 
@@ -83,10 +89,11 @@ package sfxworks
 			
 			groups = new Vector.<NetGroup>();
 			groupNames = new Vector.<String>();
+			nsGroupNames = new Vector.<String>();
 			
 			timerRefresh = new Timer(10000);
 			
-			_netConnection.connect("rtmfp://p2p.rtmfp.net", "-");
+			_netConnection.connect("rtmfp://p2p.rtmfp.net/" + "-");
 			_netConnection.addEventListener(NetStatusEvent.NET_STATUS, handleNetworkStatus);
 			/* Send objects
 			 * Send messages
@@ -120,10 +127,17 @@ package sfxworks
 		public function addGroup(groupName:String, groupSpecifier:GroupSpecifier):void
 		{
 			groupNames.push(groupName);
-			var netGroup:NetGroup = new NetGroup(_netConnection, groupSpecifier.groupspecWithAuthorizations());
+			var netGroup:NetGroup = new NetGroup(_netConnection, groupSpecifier.groupspecWithoutAuthorizations());
 			groups.push(netGroup);
 			trace("COMMUNICATIONS: Attempting to add group "  + groupName);
 			trace("COMMUNICATIONS: Netgroup = " + netGroup);
+			
+			//Trashing groups. Replacing with sql registered method
+			//var st:Statement = mysqlConnection.createStatement();
+			//st.sql = "INSERT INTO groups (`name`, `nearid`, `publickey`)"
+			//		+ " VALUES ('" + groupName + "','" + _netConnection.nearID + "',?);";
+			//st.setBinary(0, publicKey); //CLear groups every day if application doesnt remove them at ifsr
+			
 		}
 		
 		public function removeGroup(groupName:String):void
@@ -171,7 +185,8 @@ package sfxworks
 		
 		private function handleIOError(e:IOErrorEvent):void 
 		{
-			trace("COMMUNICATIONS: IO Error..");
+			trace("COMMUNICATIONS: IO Error.." + e.errorID + e.text);
+			dispatchEvent(new NetworkEvent(NetworkEvent.ERROR, "error"));
 		}
 		
 		private function handleSecurityError(e:SecurityErrorEvent):void
@@ -248,118 +263,28 @@ package sfxworks
 				case "NetGroup.Replication.Request": //When communications has the object and recieved a request for the object
 					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_REQUEST, groupNames[groups.indexOf(e.info.group)], null, e.info.index));
 					break;
-				case "NetGroup.SendTo.Notify":
+				case "NetGroup.SendTo.Notify": //When communications recieved an object from another node
 					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.OBJECT_RECIEVED, groupNames[groups.indexOf(e.info.group)], e.info.message));
 					break;
+				case "NetStream.Connect.Success":
+					dispatchEvent(new NetworkActionEvent(NetworkActionEvent.SUCCESS, e.info.stream));
+					break;
+				/*
+				case "NetGroup.MulticastStream.PublishNotify": //When a user publishes a netstream to a group
+					trace("Can I detect group names to?");
+					trace("Returned group = " + e.info.group);
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.PUBLISH_START, groupNames[group.indexOf(e.info.group)], e.info.name));
+					break;
+				case "NetGroup.MulticastStream.UnpublishNotify": //When a user ends a netestream to a group
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.PUBLISH_END, groupNames[group.indexOf(e.info.group)], e.info.name));
+					break;
+				*/
 			}
 		}
 		
 		public function groupSendToAll(groupName:String, object:Object):void
 		{
 			getGroup(groupName).sendToAllNeighbors(object);
-		}
-		
-		public function requestObject(publickey:ByteArray, args:String):void
-		{
-			fetchFarIDFromKey(publickey);
-			this.addEventListener(NetworkActionEvent.SUCCESS, requestObjectWithFarID);
-			tmpargs = args;
-		}
-		
-		private function requestObjectWithFarID(e:NetworkActionEvent):void 
-		{
-			this.removeEventListener(NetworkActionEvent.SUCCESS, requestObjectWithFarID);
-			getNetstreamFromFarID(e.info as String).send("objectRequest", tmpargs);
-		}
-		
-		private function objectRequest(args:String):void
-		{
-			//Format:
-			//Target: Target service to handle the object request
-			//Args: Arguments for said service
-			//Example: SpaceService,0.0.0.0.0.0,defaultspace
-			
-			var argArray:Array = args.split(",");
-			argArray.reverse();
-			var target:String = argArray.pop(); //Target service for handling the argument
-			argArray.reverse();
-			
-			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.OBJECT_REQUEST, target, argArray));
-		}
-		
-		public function sendObject(object:Object, publicKey:ByteArray):void
-		{
-			fetchFarIDFromKey(publicKey);
-			this.addEventListener(NetworkActionEvent.SUCCESS, sendObjectWithFarID);
-		}
-		
-		private function sendObjectWithFarID(e:NetworkActionEvent):void 
-		{
-			this.removeEventListener(NetworkActionEvent.SUCCESS, sendObjectWithFarID);
-			getNetstreamFromFarID(e.info as String).send("recieveObject", objectToSend);
-			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.OBJECT_SENDING, "", "sending object to " + e.info));
-		}
-		
-		private function recieveObject(object:Object):void
-		{
-			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.OBJECT_RECIEVED, "", object));
-		}
-		
-		public function call(publicKey:ByteArray):void
-		{
-			fetchFarIDFromKey(publicKey);
-			this.addEventListener(NetworkActionEvent.SUCCESS, makeCall);
-		}
-		//Should include answering machine..
-		
-		private function makeCall(e:NetworkActionEvent):void 
-		{
-			this.removeEventListener(NetworkActionEvent.SUCCESS, makeCall);
-			var farNS:NetStream = getNetstreamFromFarID(e.info as String);
-			farNS.send("incommingcall", _netConnection.nearID);
-			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.CALLING, farNS.farID, "ring ring"));
-		}
-		
-		public function fetchFarIDFromKey(publicKey:ByteArray):void
-		{
-			var s:Statement = mysqlConnection.createStatement();
-			s.sql = "SELECT `nearid` from `users` WHERE `publickey`=?;";
-			s.setBinary(1, publicKey);
-			var t:MySqlToken = s.executeQuery();
-			t.addResponder(new AsyncResponder(fetchNearIDFromKeySuccess, fetchNearIDFromKeyError, t));
-		}
-		
-		private function fetchNearIDFromKeyError(info:Object, token:MySqlToken):void
-		{
-			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, info));
-		}
-		
-		private function fetchNearIDFromKeySuccess(data:Object, token:MySqlToken):void 
-		{
-			var rs:ResultSet = new ResultSet(token);
-			
-			if (rs.next())
-			{
-				var farid:String = rs.getString("nearid");
-				dispatchEvent(new NetworkActionEvent(NetworkActionEvent.SUCCESS, farid));
-			}
-			else
-			{
-				this.removeEventListener(NetworkActionEvent.SUCCESS, makeCall);
-				trace("COMMUNICATIONS: COULDNT FIND TARGET");
-				dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, data));
-			}
-		}
-		
-		private function incommingcall(farid:String):void
-		{
-			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.INCOMMING_CALL, farid, "ring ring"));
-		}
-		
-		
-		private function handleIncommingBroadcast(user:String, message:String):void
-		{
-			dispatchEvent(new NetworkUserEvent(NetworkUserEvent.MESSAGE, user, message));
 		}
 		
 		private function mysql():void
@@ -378,7 +303,7 @@ package sfxworks
 			mysqlConnection.removeEventListener(Event.CONNECT, handleMysqlConnection);
 			
 			var f:File = new File();
-			f = File.applicationStorageDirectory.resolvePath(".s2key");
+			f = File.applicationStorageDirectory.resolvePath(".s3key");
 			var fs:FileStream = new FileStream();
 			var st:Statement = mysqlConnection.createStatement();
 			trace("COMMUNICATIONS: Checking key.");
@@ -425,6 +350,54 @@ package sfxworks
 		private function networkTimerRefresh(e:TimerEvent):void 
 		{
 			checkForUpdate();
+			checkGroups();
+		}
+		
+		private function checkGroups():void 
+		{
+			//Have Communications check for new members/no longer existing members every minute.
+			//If a new entry in the table, dispatch event with nearid and publickey
+			trace("COMMUNICATIONS: Checking groups..");
+			for each (var ngGroup:String in nsGroupNames)
+			{
+				trace("COMMUNICATIONS: Handling group " + ngGroup);
+				
+				var retrieval:Statement =  mysqlConnection.createStatement();
+				retrieval.sql = "SELECT * FROM `" + ngGroup + "`";
+				
+				var t:MySqlToken = retrieval.executeQuery();
+				t.addResponder(new AsyncResponder(handleNgGroupRefresh, mysqlError, t));
+				
+				//Puting a function inside a function inside a for loop o.0000
+				function handleNgGroupRefresh(info:Object, token:MySqlToken)
+				{
+					trace("COMMUNICATIONS: Primary response successful.");
+					var rs:ResultSet = new ResultSet(token);
+					for (var i:int = 0; i < rs.numColumns; i++)
+					{
+						//Get list of public keys from table
+						var s:Statement = mysqlConnection.createStatement();
+						s.sql = "SELECT * from `users` WHERE `publickey`=?;";
+						s.setBinary(1, rs.getBinary("publickey"));
+						var t:MySqlToken = s.executeQuery();
+						t.addResponder(new AsyncResponder(fetchNearIDFromKeySuccess, mysqlError, t));
+						
+						//Get user info using publickey
+						function fetchNearIDFromKeySuccess(info:Object, token:MySqlToken):void
+						{
+							trace("COMMUNICATIONS: Secondary response successful.");
+							var secondaryRS:ResultSet = new ResultSet(token);
+							var userData:Object = new Object();
+							userData.nearid = secondaryRS.getString("nearid");
+							userData.name = secondaryRS.getString("name");
+							userData.publickey = secondaryRS.getBinary("publickey");
+							
+							//Dispatch event with created object
+							dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.USER_DATA, ngGroup, userData));
+						}
+					} //For each coulumn, dispatch an event with userdata. Communications does not take account for new, existing, or nonexisting users
+				}
+			}
 		}
 		
 		private function checkForUpdate():void 
@@ -477,6 +450,7 @@ package sfxworks
 		
 		public function get publicKey():ByteArray 
 		{
+			_publicKey.position = 0;
 			return _publicKey;
 		}
 		
@@ -525,6 +499,55 @@ package sfxworks
 		{
 			trace("COMMUNICATIONS: Name change response error:" + info);
 			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, info));
+		}
+		
+		
+		//For mysql registered groups.
+		public function addNetstreamGroup(name:String):void
+		{
+			//Clear schema every day if application doesnt remove them first.
+			//(database garbage collection) [database operation]
+			
+			mysqlConnection.changeDatabaseTo("applicationgroups");
+			var st:Statement = mysqlConnection.createStatement();
+			
+			//Create the group's table. If it already exists it will 
+			st.sql = "CREATE TABLE `" + name + "` ("
+				+    "`publickey` BLOB;"
+			
+			//Add application's connection info to the group.
+			var secondary:Statement = mysqlConnection.createStatement();
+			secondary.sql = "INSERT INTO `" + name + "` (`publickey`)"
+			              + "VALUES (?)";
+			secondary.setBinary(1, _publicKey);
+			
+			var firstToken:MySqlToken = st.executeQuery();
+			firstToken.addResponder(new AsyncResponder(mysqlSuccess, mysqlError, firstToken));
+			
+			var t:MySqlToken = secondary.executeQuery();
+			t.addResponder(new AsyncResponder(handleNSGroupCreation, mysqlError, t));
+			
+			function handleNSGroupCreation(data:Object, token:MySqlToken):void
+			{
+				var rs:ResultSet = new ResultSet(token);
+				if (rs.next())
+				{
+					nsGroupNames.push(name);
+					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_SUCCESSFUL, name));
+				}
+			}
+		}
+		
+		//Add method to change group name
+		
+		private function mysqlError(info:Object, token:MySqlToken):void
+		{
+			trace("Mysql Error: " + info);
+		}
+		
+		private function mysqlSuccess(info:Object, token:MySqlToken):void
+		{
+			trace("Mysql Success: " + info);
 		}
 		
 	}
