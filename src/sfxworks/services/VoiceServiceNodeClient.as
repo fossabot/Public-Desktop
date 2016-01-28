@@ -14,9 +14,9 @@ package sfxworks.services
 			
 		}
 		
-		public function data(str:String):void
+		public function vsncdata(obj:Object):void
 		{
-			dispatchEvent(new NodeEvent(NodeEvent.INCOMMING_DATA, str));
+			dispatchEvent(new NodeEvent(NodeEvent.INCOMMING_DATA, obj));
 		}
 		
 	}

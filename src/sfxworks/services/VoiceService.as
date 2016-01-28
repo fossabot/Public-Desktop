@@ -36,6 +36,7 @@ package sfxworks.services
 		
 		private var _senderNode:NetStream;
 		private var recieverNames:Vector.<String>;
+		private var recieverKeys:Vector.<ByteArray>;
 		private var recieverNodes:Vector.<NetStream>;
 		
 		//For calculating voice activity
@@ -63,10 +64,7 @@ package sfxworks.services
 			var i:int = 0;
 			for each (var node:NetStream in recieverNodes)
 			{
-				if (node.info.audioByteCount > 0)
-				{
-					dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_AUDIO_ACTIVITY, recieverNames[i], "", node.info.audioByteCount));
-				}
+				dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_AUDIO_ACTIVITY, recieverNames[i], "", node.info.audioByteCount));
 				i++; //faster vs searching through each vector for index of node
 			}
 		}
@@ -75,11 +73,12 @@ package sfxworks.services
 		{
 			recieverNames = new Vector.<String>();
 			recieverNodes = new Vector.<NetStream>(); //it should garbage collect the old NetStreams..in theory
+			recieverKeys = new Vector.<ByteArray>();
 			
 			currentGroupPassword = password;
 			
 			gspec = new GroupSpecifier(SERVICE_NAME + name + password);
-			gspec.postingEnabled = true;
+			gspec.serverChannelEnabled = true;
 			gspec.multicastEnabled = true;
 			gspec.objectReplicationEnabled = true;
 			
@@ -140,17 +139,20 @@ package sfxworks.services
 					publicNodeI.client = vsnc;
 					publicNodeI.play(SERVICE_NAME + currentGroup + currentGroupPassword);
 					vsnc.addEventListener(NodeEvent.INCOMMING_DATA, handleIncommingData);
+					trace("Public node listening on " + SERVICE_NAME + currentGroup + currentGroupPassword);
 					break;
 				case publicNodeO:
 					trace("vs: Handling public node outbound");
 					publicNodeO.client = new VoiceServiceNodeClient();
 					publicNodeO.publish(SERVICE_NAME + currentGroup + currentGroupPassword);
-					publicNodeO.send("data", baToString(c.publicKey));
+					publicNodeO.send("vsncdata", baToString(c.publicKey));
+					trace("Public node sending on " + SERVICE_NAME + currentGroup + currentGroupPassword);
 					break;
 				case _senderNode:
 					trace("vs: Handling sender node");
 					_senderNode.attachAudio(_microphone);
 					_senderNode.publish(baToString(c.publicKey));
+					trace("Publishing audio feed on " + baToString(c.publicKey));
 					break;
 			}
 		}
@@ -160,46 +162,54 @@ package sfxworks.services
 		private function handleIncommingData(e:NodeEvent):void 
 		{
 			trace("vs: Incomming data from public node " + e.data);
-			if (baToString(c.publicKey) != e.data && recieverNames.indexOf(e.data) != -1)
+			
+			trace("vs: user:" + e.data.name);
+			trace("vs: PublicKey:" + e.data.publicKey);
+			
+			//If the incomming key isn't it's own && it's not something already in the index
+			
+			if (c.publicKey != e.data.publicKey && recieverKeys.indexOf(e.data.publicKey) == -1)
 			{
+				trace("vs: New user:" + e.data.name);
+				trace("vs: PublicKey:" + e.data.publicKey);
 				//If it cannot find the new connecting public key in itself or within its already listening nodes
 				
 				//Create and play the netstream
 				var ns:NetStream = new NetStream(c.netConnection, gspec.groupspecWithoutAuthorizations());
-				ns.addEventListener(NetStatusEvent.NET_STATUS, handleNodeStatus); //>Implying
-				ns.play(e.data);
+				ns.addEventListener(NetStatusEvent.NET_STATUS, handleNodeStatus);//>Implying
+				ns.play(baToString(e.data.publicKey)); //>Implying
 				
 				//Add to index
-				recieverNames.push(e.data);
+				recieverNames.push(e.data.name);
+				recieverKeys.push(e.data.key);
 				recieverNodes.push(ns);
 				
 				//Announce publickey to group for the new user.
 				//Could do it for the user, but eh.
-				publicNodeO.send("data", baToString(c.publicKey));
+				var toSend:Object = new Object();
+				toSend.publicKey = c.publicKey;
+				toSend.name = c.name;
+				
+				publicNodeO.send("data", toSend);
 				
 				//TODO: Have it target the newcommer vs the entire group each node in the group doesnt have to listen to existing users.
 				//In the case scenario where theres 9034712192-85324952349572345-24957248975139847139856324056^3 connected users in a group
 				// V all to point of extinction type function
 				
-				//Optionally send name later on. Maybe include some sort of nam resolver
-				dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_CONNECTED, e.data as String));
+				//Optionally send name later on. Maybe include some sort of name resolver
+				dispatchEvent(new VoiceServiceEvent(VoiceServiceEvent.USER_CONNECTED, e.data.name));
 			}
 			
 		}
 		
 		public function set microphone(value:Microphone):void 
 		{
+			_microphone = value;
 			if (currentGroup != null)
 			{
-				_senderNode = new NetStream(c.netConnection, NetStream.DIRECT_CONNECTIONS);
+				_senderNode = new NetStream(c.netConnection, gspec.groupspecWithoutAuthorizations());
 				//Reset microphone
-				_senderNode.attachAudio(value);
-				
-				//Republish netstream
-				_senderNode.publish(baToString(c.publicKey));
 			}
-			
-			_microphone = value;
 		}
 		
 		public function get microphone():Microphone 
@@ -229,7 +239,6 @@ package sfxworks.services
 			var str:String = new String();
 			for (var i:int = 0; i < 6; i++)
 			{
-				trace("How many times");
 				str += bytearray.readInt().toString() + ".";
 			}
 			return str;

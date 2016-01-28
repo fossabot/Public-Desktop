@@ -41,7 +41,7 @@ package
 			graphBarHistory.push(level);
 			drawNewGraph();
 			
-			trace("vgb: Mic level = " + level);
+			//trace("vgb: Mic level = " + level);
 		}
 		
 		private function drawNewGraph():void
@@ -52,7 +52,7 @@ package
 			graph.graphics.clear();
 			graph.graphics.beginFill(0x00CCFF, .5);
 			
-			trace("All values = " + graphBarHistory);
+			//trace("All values = " + graphBarHistory);
 			
 			for (var i:int = 0; i < 19; i++)
 			{//                                        highest number  *               percentage

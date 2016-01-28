@@ -802,6 +802,7 @@
 			}
 			else
 			{
+
 				NativeApplication.nativeApplication.startAtLogin = true;
 				config_mc.startatlaunch_mc.gotoAndStop(1);
 			}
@@ -1175,7 +1176,7 @@
 		//Update own bar based on netstream out byte level
 		private function voiceUpdateOwnTimer(e:TimerEvent):void 
 		{
-			trace("Audio byte count = " + voiceChatService.senderNode.info.audioBytesPerSecond);
+			//trace("Audio byte count = " + voiceChatService.senderNode.info.audioBytesPerSecond);
 			voiceGroupBars[0].updateByteLevel(voiceChatService.senderNode.info.audioBytesPerSecond);
 		}
 		
@@ -1212,6 +1213,7 @@
 		//When a user connects
 		private function handleVoiceConnectedUser(e:VoiceServiceEvent):void 
 		{
+			trace("adding bar for " + e.name);
 			//Construct
 			var vgb:VoiceGroupBar = new VoiceGroupBar(e.name);
 			
@@ -1220,7 +1222,7 @@
 			voiceGroupNames.push(e.name);
 			
 			//Add to display list
-			addChild(vgb);
+			voiceChat_mc.addChild(vgb);
 			
 			//Reposition
 			reorderVoiceBars();

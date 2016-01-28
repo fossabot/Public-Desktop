@@ -32,7 +32,7 @@ package sfxworks.services
 			publicNodeOConnected = new Boolean(false);
 			
 			gs = new GroupSpecifier(GLOBAL_CHAT_NAME);	
-			gs.postingEnabled = true;
+			gs.objectReplicationEnabled = true;
 			gs.serverChannelEnabled = true;
 			gs.multicastEnabled = true;
 			
