@@ -1,29 +1,22 @@
 package  
 {
-	import com.maclema.mysql.Field;
-	import sfxworks.DesktopObject;
 	import flash.display.Bitmap;
 	import flash.display.BitmapData;
 	import flash.display.DisplayObject;
 	import flash.display.Loader;
 	import flash.display.MovieClip;
-	import flash.display.Sprite;
 	import flash.events.Event;
 	import flash.events.KeyboardEvent;
 	import flash.events.MouseEvent;
-	import flash.events.NetStatusEvent;
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
-	import flash.html.HTMLLoader;
 	import flash.media.Camera;
 	import flash.media.Video;
-	import flash.net.NetConnection;
-	import flash.net.NetStream;
 	import flash.net.URLRequest;
-	import flash.text.TextField;
 	import flash.utils.ByteArray;
 	import sfxworks.Communications;
+	import sfxworks.DesktopObject;
 	
 	/**
 	 * ...

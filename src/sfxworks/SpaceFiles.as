@@ -1,13 +1,11 @@
 package sfxworks 
 {
-	import adobe.utils.CustomActions;
 	import flash.display.MovieClip;
 	import flash.events.Event;
 	import flash.events.MouseEvent;
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
-	import flash.html.HTMLLoader;
 	import flash.utils.ByteArray;
 	import sfxworks.NetworkUserEvent;
 	/**

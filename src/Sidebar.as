@@ -1,7 +1,7 @@
 ﻿package 
 {
-	import flash.display.Bitmap;
-	import flash.display.BitmapData;
+	import fl.transitions.easing.*;
+	import fl.transitions.Tween;
 	import flash.display.DisplayObject;
 	import flash.display.MovieClip;
 	import flash.events.Event;
@@ -9,11 +9,7 @@
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
-	import flash.geom.Rectangle;
-	import flash.net.registerClassAlias;
 	
-	import fl.transitions.Tween;
-	import fl.transitions.easing.*;
 	
 	/**
 	 * ...

@@ -1,11 +1,11 @@
 package 
 {
+	import fl.transitions.easing.*;
+	import fl.transitions.Tween;
 	import flash.display.Bitmap;
 	import flash.display.Sprite;
 	import flash.events.MouseEvent;
 	import flash.filesystem.File;
-	import fl.transitions.Tween;
-	import fl.transitions.easing.*;
 	
 	/**
 	 * ...

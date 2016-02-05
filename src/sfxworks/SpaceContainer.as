@@ -1,9 +1,7 @@
-package sfxworks 
+﻿package sfxworks 
 {
 	import flash.display.DisplayObject;
-	import flash.display.Loader;
 	import flash.display.MovieClip;
-	import flash.display.Sprite;
 	import flash.display.Stage;
 	import flash.events.Event;
 	import flash.events.KeyboardEvent;
@@ -77,11 +75,11 @@ package sfxworks
 				var requestedFile:String = stringKey.split("/")[1];
 				if (requestedFile != "")
 				{
-					c.requestObject(ba, "spaceservice," + myIdString + "," + requestedFile);
+					//c.requestObject(ba, "spaceservice," + myIdString + "," + requestedFile);
 				}
 				else
 				{
-					c.requestObject(ba, "spaceservice," + myIdString + "," + "default.space");
+					//c.requestObject(ba, "spaceservice," + myIdString + "," + "default.space");
 				}
 				
 				c.addEventListener(NetworkActionEvent.SUCCESS, handleNavRequestSuccess);
@@ -207,7 +205,7 @@ package sfxworks
 			fs.close();
 			
 			//Remove current space object
-			currentSpaceObject.removeChildren();
+			//currentSpaceObject.removeChildren();
 			removeChild(currentSpaceObject);
 			currentSpaceObject = null;
 			
@@ -233,7 +231,7 @@ package sfxworks
 		{
 			if (currentSpaceObject != null)
 			{
-				currentSpaceObject.removeChildren();
+				//currentSpaceObject.removeChildren();
 				removeChild(currentSpaceObject);
 			}
 			
@@ -270,7 +268,7 @@ package sfxworks
 		{
 			if (currentSpaceObject != null)
 			{
-				currentSpaceObject.removeChildren();
+				//currentSpaceObject.removeChildren();
 				removeChild(currentSpaceObject);
 			}
 			

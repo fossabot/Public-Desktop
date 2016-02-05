@@ -1,6 +1,5 @@
 package sfxworks.services 
 {
-	import flash.events.Event;
 	import flash.events.EventDispatcher;
 	/**
 	 * ...

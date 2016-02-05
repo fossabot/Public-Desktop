@@ -1,40 +1,33 @@
 package sfxworks 
 {
-	import adobe.utils.CustomActions;
 	import air.net.URLMonitor;
-	import away3d.loaders.misc.AssetLoaderToken;
 	import com.maclema.mysql.Connection;
-	import com.maclema.mysql.events.MySqlErrorEvent;
 	import com.maclema.mysql.MySqlToken;
 	import com.maclema.mysql.ResultSet;
 	import com.maclema.mysql.Statement;
 	import flash.desktop.NativeApplication;
 	import flash.errors.IOError;
-	import flash.events.IOErrorEvent;
-	import flash.events.SecurityErrorEvent;
-	import flash.net.GroupSpecifier;
-	import flash.net.NetGroup;
-	import flash.net.URLLoader;
-	import sfxworks.NetworkActionEvent;
-	import sfxworks.NetworkErrorEvent;
-	import sfxworks.NetworkUserEvent;
-	import flash.events.ErrorEvent;
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
+	import flash.events.IOErrorEvent;
 	import flash.events.NetStatusEvent;
+	import flash.events.SecurityErrorEvent;
 	import flash.events.StatusEvent;
 	import flash.events.TimerEvent;
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
+	import flash.net.GroupSpecifier;
 	import flash.net.NetConnection;
-	import flash.net.NetStream;
-	import sfxworks.NetworkEvent;
+	import flash.net.NetGroup;
+	import flash.net.URLLoader;
 	import flash.net.URLRequest;
 	import flash.utils.ByteArray;
 	import flash.utils.Timer;
-	import sfxworks.NetworkGroupEvent;
 	import mx.rpc.AsyncResponder;
+	import sfxworks.NetworkActionEvent;
+	import sfxworks.NetworkEvent;
+	import sfxworks.NetworkGroupEvent;
 	/**
 	 * ...
 	 * @author Samuel Jacob Walker
@@ -93,7 +86,7 @@ package sfxworks
 			
 			timerRefresh = new Timer(10000);
 			
-			_netConnection.connect("rtmfp://p2p.rtmfp.net/" + "-");
+			_netConnection.connect("-" + "-");
 			_netConnection.addEventListener(NetStatusEvent.NET_STATUS, handleNetworkStatus);
 			/* Send objects
 			 * Send messages
@@ -357,7 +350,7 @@ package sfxworks
 		{
 			//Have Communications check for new members/no longer existing members every minute.
 			//If a new entry in the table, dispatch event with nearid and publickey
-			trace("COMMUNICATIONS: Checking groups..");
+			//trace("COMMUNICATIONS: Checking groups..");
 			for each (var ngGroup:String in nsGroupNames)
 			{
 				trace("COMMUNICATIONS: Handling group " + ngGroup);
@@ -402,16 +395,16 @@ package sfxworks
 		
 		private function checkForUpdate():void 
 		{
-			trace("COMMUNICATIONS: Checking for update..");
+			//trace("COMMUNICATIONS: Checking for update..");
 			try
 			{
 				versionCheckLoader.load(versionCheckSource);
 			}
 			catch(ioerror:IOError)
 			{
-				trace("COMMUNICATIONS: ioError from version checker. " + ioerror.message);
+				//trace("COMMUNICATIONS: ioError from version checker. " + ioerror.message);
 			}
-			trace("End of check for update function..");
+			//trace("End of check for update function..");
 		}
 		
 		private function parseUpdateDetail(e:Event):void
@@ -421,8 +414,8 @@ package sfxworks
 			var standardVersion:Number = new Number(parseFloat(applicationContent.ns::currentVersion));
 			var source:String = new String(applicationContent.ns::source);
 			
-			trace("COMMUNICATIONS: Standard version = " + standardVersion);
-			trace("COMMUNICATIONS: Current version = " + currentVersion);
+			//trace("COMMUNICATIONS: Standard version = " + standardVersion);
+			//trace("COMMUNICATIONS: Current version = " + currentVersion);
 			
 			if (standardVersion > currentVersion)
 			{

@@ -1,13 +1,9 @@
 package 
 {
-	import flash.display.BitmapData;
 	import flash.display.DisplayObject;
-	import flash.display.Loader;
 	import flash.display.MovieClip;
-	import flash.events.Event;
 	import flash.events.TimerEvent;
 	import flash.filesystem.File;
-	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
 	import flash.text.TextField;
 	import flash.utils.Timer;

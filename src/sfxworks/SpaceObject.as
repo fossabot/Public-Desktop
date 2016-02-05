@@ -8,21 +8,16 @@
 	import flash.events.AsyncErrorEvent;
 	import flash.events.Event;
 	import flash.events.MouseEvent;
-	import flash.events.ProgressEvent;
 	import flash.events.TimerEvent;
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
-	import flash.filesystem.StorageVolume;
 	import flash.geom.Matrix;
 	import flash.geom.Rectangle;
-	import flash.geom.Transform;
 	import flash.html.HTMLLoader;
 	import flash.media.Video;
 	import flash.net.NetConnection;
 	import flash.net.NetStream;
-	import flash.text.TextField;
-	import flash.text.TextFieldType;
 	import flash.utils.ByteArray;
 	import flash.utils.Timer;
 	import org.bytearray.gif.player.GIFPlayer;
@@ -170,7 +165,7 @@
 				var bmd:BitmapData = new BitmapData(htmlLoader.width, htmlLoader.height);
 				bmd.draw(htmlLoader as DisplayObject);
 				htmlBm = new Bitmap(bmd);
-				removeChildren();
+				//removeChildren();
 				addChild(htmlBm);
 				trace("Html Render Complete");
 			}
