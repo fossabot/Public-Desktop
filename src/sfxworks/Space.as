@@ -1,13 +1,10 @@
 ﻿package sfxworks 
 {
+	import by.blooddy.crypto.MD5;
 	import flash.display.Bitmap;
 	import flash.display.BitmapData;
 	import flash.display.DisplayObject;
-	import flash.display.JPEGEncoderOptions;
-	import flash.display.Loader;
 	import flash.display.MovieClip;
-	import flash.display.SpreadMethod;
-	import flash.display.Sprite;
 	import flash.display.Stage;
 	import flash.events.Event;
 	import flash.events.KeyboardEvent;
@@ -17,7 +14,6 @@
 	import flash.filesystem.FileStream;
 	import flash.geom.Matrix;
 	import flash.geom.Rectangle;
-	import flash.html.HTMLLoader;
 	import flash.net.FileFilter;
 	import flash.utils.ByteArray;
 	
@@ -203,7 +199,7 @@
 			for (var i:int = 0; i < spaceObjects.length; i++)
 			{
 				trace("Saved object: " + spaceObjects[i].source);
-				fs.writeUTF(spaceObjects[i].source); //Source 
+				fs.writeUTF(spaceObjects[i].source); //Source
 				fs.writeUTF(spaceObjects[i].actions); //Actions text
 				fs.writeDouble(spaceObjects[i].x); //Position
 				fs.writeDouble(spaceObjects[i].y);
@@ -216,6 +212,20 @@
 				fs.writeDouble(spaceObjects[i].transform.matrix.d);
 				fs.writeDouble(spaceObjects[i].transform.matrix.tx);
 				fs.writeDouble(spaceObjects[i].transform.matrix.ty);
+				
+				var source:File = new File(spaceObjects[i].source);
+				
+				var tmp:ByteArray = new ByteArray();
+				var fs2:FileStream = new FileStream();
+				
+				fs2.open(source, FileMode.READ);
+					fs2.readBytes(tmp, 0, source.size);
+					fs2.close();
+				
+				//Add:FileSize
+				//Add:MD5
+				fs.writeDouble(source.size);
+				fs.writeUTF(MD5.hashBytes(tmp));
 			}
 			fs.close();
 			
