@@ -34,7 +34,7 @@ package sfxworks.services
 		
 		public override function toString():String 
 		{ 
-			return formatToString("DesktopServiceEvent", "type", "file", "part", "max", "bubbles", "cancelable", "eventPhase"); 
+			return formatToString("DesktopServiceEvent", "type", "file", "part", "max", "extension", "bubbles", "cancelable", "eventPhase"); 
 		}
 		
 		public function get part():Number 

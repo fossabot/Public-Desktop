@@ -229,7 +229,7 @@ package sfxworks.services
 		
 		public function getFile(address:String, type:String):void //Spaces or Resources
 		{
-			if (gnames.indexOf(SERVICE_NAME + address + type) > -1)
+			if (gnames.indexOf(SERVICE_NAME + address + "." + type) > -1)
 			{
 				//Group exist.
 				//Means you already have the file. Don't bother doing anything.
