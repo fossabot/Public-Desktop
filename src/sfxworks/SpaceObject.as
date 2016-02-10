@@ -50,7 +50,7 @@
 		//Tmp
 		private var ba:ByteArray;
 		
-		public function SpaceObject(source:String, actions:String, bounds:Rectangle, rotation:int=0, matrixx:Matrix = null, editmode:Boolean=true) 
+		public function SpaceObject(source:String, actions:String, bounds:Rectangle, rotation:int=0, matrixx:Matrix = null, editmode:Boolean=true, extension:String="") 
 		{
 			if (source != "embeddedobject")
 			{
@@ -70,7 +70,7 @@
 				htmlLoader.loadString(_actions);
 				htmlLoader.addEventListener(Event.COMPLETE, handleHtmlLoadComplete);
 			}
-			else if (sourceFile.extension.toLocaleLowerCase() == "jpg" || sourceFile.extension.toLocaleLowerCase() == "gif" || sourceFile.extension.toLocaleLowerCase() == "png" || sourceFile.extension.toLocaleLowerCase() == "jpeg" || sourceFile.extension.toLocaleLowerCase() == "bmp")
+			else if (extension.toLocaleLowerCase() == "jpg" || extension.toLocaleLowerCase() == "gif" || extension.toLocaleLowerCase() == "png" || extension.toLocaleLowerCase() == "jpeg" || extension.toLocaleLowerCase() == "bmp")
 			{
 				//It's an image
 				trace("it's an image");
@@ -83,7 +83,7 @@
 				fs.readBytes(ba, 0, sourceFile.size);
 				fs.close();
 				
-				if (sourceFile.extension == "gif")
+				if (extension == "gif")
 				{
 					//Handle gif with gif player
 					trace("It's a gif!");
@@ -98,7 +98,7 @@
 					l.contentLoaderInfo.addEventListener(Event.COMPLETE, handleImageLoadComplete);
 				}
 			}
-			else if (sourceFile.extension == "mp4" || sourceFile.extension == "m4v" || sourceFile.extension == "f4v" || sourceFile.extension == "3gpp" || sourceFile.extension == "flv")
+			else if (extension == "mp4" || extension == "m4v" || extension == "f4v" || extension == "3gpp" || extension == "flv")
 			{
 				//It's a video
 				trace("It's a video");

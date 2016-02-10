@@ -31,16 +31,16 @@
 		private var _access:String;
 		
 		private var editTool:TransformTool;
-		private var editModee:Boolean;
+		private var _editMode:Boolean;
 		
 		//Objects on stage
 		public var spaceObjects:Vector.<SpaceObject>;
 		private var selectedSpaceObject:SpaceObject;
 		
-		public function Space(stage:Stage, spaceToLoad:String="", editMode:Boolean=false, ext:Boolean=false, mockDirectory:File=null):void
+		public function Space(stage:Stage, spaceToLoad:String="", editMode:Boolean=false, ext:Boolean=false):void
 		{
 			stagee = stage;
-			editModee = editMode;
+			_editMode = editMode;
 			embed_mc.visible = false;
 			rightmenu_mc.visible = false;
 			config_mc.visible = false;
@@ -60,14 +60,22 @@
 				{
 					if (ext)
 					{
-						var so:SpaceObject = new SpaceObject(mockDirectory.nativePath + fs.readUTF(), fs.readUTF(), new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), fs.readDouble(), new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), editModee);
+						var source:String = fs.readUTF();
+						var actions:String = fs.readUTF();
+						var bounds:Rectangle = new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble());
+						var rotation:Number = fs.readDouble();
+						var matrix:Matrix = new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble());
+						var sourceSize:Number = fs.readDouble();
+						var md5:String = fs.readUTF();
+						
+						var so:SpaceObject = new SpaceObject(File.applicationStorageDirectory.resolvePath("resource" + File.separator + md5 + ".dsource").nativePath, actions, bounds, rotation, matrix, editMode, source.split(".")[source.split().length - 1]);
 					}
 					else
 					{
-						var so:SpaceObject = new SpaceObject(fs.readUTF(), fs.readUTF(), new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), fs.readDouble(), new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), editModee);
+						var so:SpaceObject = new SpaceObject(fs.readUTF(), fs.readUTF(), new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), fs.readDouble(), new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), _editMode, source.split(".")[source.split().length - 1]);
 					}
 					
-					if (editModee)
+					if (_editMode)
 					{
 						bounds_mc.addChild(so); //Add to bounds
 						spaceObjects.push(so); //Index
@@ -98,7 +106,7 @@
 		
 		private function handleBoundsMouseDown(e:MouseEvent):void 
 		{
-			if (editModee)
+			if (_editMode)
 			{
 				config_mc.gotoAndStop(2);
 				removeEventListener(Event.ENTER_FRAME, enterFrameHandler);
