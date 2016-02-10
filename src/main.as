@@ -1,4 +1,4 @@
-﻿package 
+package 
 {
 	
 	import com.coltware.airxzip.ZipEntry;
@@ -47,10 +47,13 @@
 	import sfxworks.NetworkUserEvent;
 	import sfxworks.services.ChatService;
 	import sfxworks.services.ChatServiceEvent;
+	import sfxworks.services.DesktopService;
+	import sfxworks.services.DesktopServiceEvent;
 	import sfxworks.services.FileSharingEvent;
 	import sfxworks.services.FileSharingService;
 	import sfxworks.services.VoiceService;
 	import sfxworks.services.VoiceServiceEvent;
+	import sfxworks.Space;
 	import sfxworks.SpaceContainer;
 	import sfxworks.UpdateEvent;
 	
@@ -82,6 +85,9 @@
 		private var voiceGroupNames:Vector.<String>;
 		private var vt:Timer;
 		
+		//Desktop service
+		private var desktopService:DesktopService;
+		
 		//HTMLFrame
 		private var htmlWindow:NativeWindow;
 		
@@ -93,7 +99,7 @@
 		//Background window
 		private var backgroundWindow:NativeWindow;
 		
-		//Optional cpuminer
+		//cpuminer
 		private var cpuminer:NativeProcess;
 		
 		private var firstrun:Boolean;
@@ -347,9 +353,6 @@
 				}
 				fs.close();
 			}
-			
-			
-			
 		}
 		
 		// === NETWORK STATUS ===
@@ -366,10 +369,9 @@
 			trace("connected.");
 			//Handle Communications key
 			communications_mc.status_mc.gotoAndStop(2);
-			c.publicKey.position = 0;
 			for (var i:int = 0; i < 6; i++)
 			{
-				communications_mc.status_mc.publickey_txt.appendText(c.publicKey.readInt().toString() + ".");
+				communications_mc.status_mc.publickey_txt.appendText(c.publicKey.readDouble().toString() + ".");
 			}
 			
 			//Calling
@@ -387,12 +389,17 @@
 			communications_mc.status_mc.globalchat_btn.addEventListener(MouseEvent.CLICK, handleChatClick);
 			chatService = new ChatService(c);
 			
+			//Desktop service
+			desktopService = new DesktopService(c);
+			
 			//HTMLFrame
 			communications_mc.status_mc.litehtmlbrowser_btn.addEventListener(MouseEvent.CLICK, handleLiteHtmlFrameClick);
 			
 			//Group voice chat
 			communications_mc.status_mc.globalGroupVoice_mc.addEventListener(MouseEvent.CLICK, handleVoiceChatClick);
 			
+			//Desktop Service
+			communications_mc.status_mc.publicDesktop_mc.addEventListener(MouseEvent.CLICK, handlePublicDesktopClick);
 			
 			//Enable hover over & out
 			//communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
@@ -1234,6 +1241,203 @@
 				position += 35;
 			}
 		}
+		
+		//==== Desktop Service ====
+		
+		//publicDeskstop_mc
+		//navigation_mc
+		//bar_mc text_txt
+		
+		
+		private var objectsLoaded:int;
+		private var objectsToLoad:int;
+		
+		private var currentRequest:String;
+		private var resourceParts:Vector.<String>;
+		
+		
+		private function handlePublicDesktopClick(e:MouseEvent):void
+		{
+			if (publicDesktop_mc.visible)
+			{
+				desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+				desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+				desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
+				publicDesktop_mc.navivation_mc.text_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
+			}
+			else
+			{
+				publicDesktop_mc.navivation_mc.text_txt.addEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
+			}
+		}
+		
+		private function handlePublicDesktopKeyDown(e:KeyboardEvent):void 
+		{
+			if (e.keyCode == 13)
+			{
+				navigateToDesktop(e.target.text);
+			}
+		}
+		
+		private function updateLoadingBar(current:int, max:int):void
+		{
+			//Only when load is complete
+			//Are we to give the space object to the constructor
+			//Tell it to use the md5 to load the file instead of the source
+			publicDesktop_mc.navivation_mc.bar_mc.width = publicDesktop_mc.navivation_mc.width * (current / max);
+			
+			if (currentRequest.search(/^[a-f0-9]{32}$/) > -1)
+			{
+				publicDesktop_mc.navivation_mc.text_txt.text = "md5!:" + currentRequest;
+			}
+			else if (currentRequest.search(/^[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.$/) > -1)
+			{
+				publicDesktop_mc.navivation_mc.text_txt.text = "rmh!:" + currentRequest;
+			}
+			
+			publicDesktop_mc.navivation_mc.text_txt.appendText(" [" + current.toString() + "/" + max.toString() + "]");
+		}
+		
+		private function navigateToDesktop(address:String):void
+		{
+			//type!text
+			//Direct file request 
+			//md5!:sa9fyds78h45j10uhnmsdf9hu
+			
+			//Host request
+			//rmh!:123892095.477682095.14518920235.5421892095.112892095.541892095
+			
+			desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
+			
+			currentRequest = new String(address);
+			resourceParts = new Vector.<String>();
+			
+			//Request both as a space and a resource.
+			//Only one will respond.
+			if (address.search(/^[a-f0-9]{32}$/) > -1)
+			{
+				//It's an md5 address
+				desktopService.getFile(address, DesktopService.SPACE_DIRECTORY);
+				desktopService.getFile(address, DesktopService.RESOURCE_DIRECTORY);
+			}
+			
+			else if (address.search(/^[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.$/) > -1)
+			{
+				//It's a public key.
+				desktopService.getFile(address, DesktopService.SPACE_DIRECTORY);
+			}
+			
+			else
+			{
+				publicDesktop_mc.navivation_mc.text_txt.text = "invalid request. use a md5 or a public key from a peer."
+				return;
+			}
+			
+			desktopService.addEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.addEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.addEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
+			
+			objectsLoaded = new int();
+			objectsToLoad = new int(1);
+		}
+		
+		private function handleDesktopPermissionsError(e:DesktopServiceEvent):void 
+		{
+			desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
+			
+			publicDesktop_mc.navivation_mc.text_txt.text = "The user owning " + currentRequest + " does not allow you to navigate here.";
+		}
+		
+		private function handleInitialRequest(e:DesktopServiceEvent):void 
+		{
+			objectsLoaded++;
+			
+			if (e.type == DesktopServiceEvent.SPACE_OBJECT_RECIEVED)
+			{
+				//Check to see if it's the space file being requested
+				if (currentRequest == e.file.name)
+				{
+					parseSpaceFile(e.file);
+					updateLoadingBar(objectsLoaded, objectsToLoad);
+				}
+			}
+			else if (e.type = DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED)
+			{
+				//Check to see if it's a loaded resource for the current space file being requested
+				if (resourceParts.indexOf(e.file.name) > -1 || e.file.name == currentRequest)
+				{
+					updateLoadingBar(objectsLoaded, objectsToLoad);
+				}
+			}
+			
+			if (objectsLoaded == objectsToLoad)
+			{
+				//All objects loaded.
+				
+				if (e.file.name == currentRequest)
+				{
+					//It's an individual file request. Not part of a space fetch.
+					//Like an image or a video.
+					if (e.extension == "GIF")
+					{
+						//use gif player
+					}
+					else if (e.extension == "MP4" || e.extension == "M4V" || e.extension == "F4V" || e.extension == "3GPP" || e.extension == "FLV")
+					{
+						//use video player
+					}
+					else if (e.extension == "SWF" || e.extension == "JPG" || e.extension == "JPEG" || e.extension == "PNG" || e.extension == "BMP")
+					{
+						//use loader (its an swf or an image.)
+					}
+					else
+					{
+						//wtf is this?
+						publicDesktop_mc.navivation_mc.text_txt.text = "Unsupported file type [" + e.extension + "]@: " + e.file.nativePath;
+					}
+				}
+				else
+				{
+					//Send over to space object to create a new space.
+					addChild(new Space(stage, e.file.nativePath, false, true));
+				}
+			}
+		}
+		
+		private function parseSpaceFile(file:File):Object
+		{
+			var results:Object = new Object();
+			
+			var fs:FileStream = new FileStream();
+			fs.open(file, FileMode.READ);
+				results.numberOfObjects = fs.readDouble();
+				results.permissions = fs.readUTF();
+				for (var i:int = 0; i < results.numberOfObjects; i++)
+				{
+					//Skip source and actions, and data
+					fs.readUTF();
+					fs.readUTF();
+					fs.position += 8 * 11;
+					
+					//Update the number of objects to load
+					objectsToLoad += fs.readDouble();
+					
+					//Tell desktopservice to get the file
+					var md5Resource:String = fs.readUTF();
+					desktopService.getFile(md5Resource, DesktopService.RESOURCE_FILE_EXTENSION);
+					resourceParts.push(md5Resource);
+				}
+				fs.close();
+		}
+		
+		
+		
+		
+		
 		
 		
 		///Util functions
