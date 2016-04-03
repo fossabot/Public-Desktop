@@ -329,7 +329,48 @@ package sfxworks.services
 		
 		private function allowedToView(permissions:String):Boolean
 		{
-			
+			var argType = permissions.split("(")[0];
+			var argument:String = permissions.split("(")[1].split(")")[0];
+			switch(argType)
+			{
+				case "allow":
+					if (argument == "all")
+					{
+						return true;
+					}
+					else
+					{
+						var publicKeysAllowed:Array = argument.split(",");
+						if (publicKeysAllowed.indexOf(baToString(c.publicKey)) > -1)
+						{
+							return true;
+						}
+						else
+						{
+							return false;
+						}
+					}
+					break;
+				case "deny":
+					if (argument == "all")
+					{
+						return false;
+					}
+					else
+					{
+						var publicKeysDenied:Array = argument.split(",");
+						if (publicKeysDenied.indexOf(baToString(c.publicKey)) > -1)
+						{
+							return false;
+						}
+						else
+						{
+							return true;
+						}
+					}
+					break;
+			}
+			return false;
 		}
 		
 		private function baToString(ba:ByteArray):String

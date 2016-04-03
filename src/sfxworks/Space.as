@@ -20,6 +20,16 @@
 	/**
 	 * ...
 	 * @author Samuel Jacob Walker
+	 * 
+	 * Permissions Format
+	 * allow(args)
+	 * deny(args)
+	 * 
+	 * constants: all
+	 * example:
+	 * allow(all)
+	 * deny(1002030.1203021.02130123.01230213.03042123.02312401, 1230892.213214124.21321312.431431.213124214.12312312)
+	 * 
 	 */
 	public class Space extends MovieClip 
 	{
