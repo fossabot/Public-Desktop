@@ -804,7 +804,6 @@ package
 			}
 			else
 			{
-
 				NativeApplication.nativeApplication.startAtLogin = true;
 				config_mc.startatlaunch_mc.gotoAndStop(1);
 			}
@@ -839,8 +838,6 @@ package
 			f = File.applicationStorageDirectory.resolvePath("C:/");
 			f.openWithDefaultApplication();
 		}
-		
-		
 		
 		
 		// ===== DESKTOP FRAME ======
@@ -1264,9 +1261,11 @@ package
 				desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
 				desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
 				publicDesktop_mc.navivation_mc.text_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
+				publicDesktop_mc.visible = false;
 			}
 			else
 			{
+				publicDesktop_mc.visible = true;
 				publicDesktop_mc.navivation_mc.text_txt.addEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
 			}
 		}
@@ -1307,8 +1306,8 @@ package
 			//Host request
 			//rmh!:123892095.477682095.14518920235.5421892095.112892095.541892095
 			
-			desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
-			desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleInitialRequest);
 			desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
 			
 			currentRequest = new String(address);
@@ -1327,6 +1326,8 @@ package
 			{
 				//It's a public key.
 				desktopService.getFile(address, DesktopService.SPACE_DIRECTORY);
+				//Since it's a public key, public key addressed default to a space file. So There's no need to request for both a space directory
+				//and a resource directory in hopes of retrieving something.
 			}
 			
 			else
@@ -1335,8 +1336,8 @@ package
 				return;
 			}
 			
-			desktopService.addEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
-			desktopService.addEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.addEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleInitialRequest);
+			desktopService.addEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleInitialRequest);
 			desktopService.addEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
 			
 			objectsLoaded = new int();
@@ -1345,8 +1346,8 @@ package
 		
 		private function handleDesktopPermissionsError(e:DesktopServiceEvent):void 
 		{
-			desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
-			desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleInitialRequest);
+			desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleInitialRequest);
 			desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
 			
 			publicDesktop_mc.navivation_mc.text_txt.text = "The user owning " + currentRequest + " does not allow you to navigate here.";
