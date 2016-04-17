@@ -1,5 +1,6 @@
 ﻿package sfxworks 
 {
+	import TransformTool;
 	import by.blooddy.crypto.MD5;
 	import flash.display.Bitmap;
 	import flash.display.BitmapData;

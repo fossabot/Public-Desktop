@@ -121,11 +121,12 @@ package sfxworks.services
 		private function addFileToListing(f:File, dataType:String, permissions:String, extension:String):void
 		{
 			var tmp:ByteArray = new ByteArray();
+			var fs:FileStream = new FileStream();
 			fs.open(f, FileMode.READ)
 				fs.readBytes(tmp, 0, f.size);
 				fs.close();
 			var hash:String = MD5.hashBytes(tmp);
-			var gspec:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + hash + "." + type); //Tecnically if someone has the exact same video in the exact same position as someone, with the exact same matrix as someone, they'll be part of this group. Which actually helps as far as distribution goes.
+			var gspec:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + hash + "." + dataType); //Tecnically if someone has the exact same video in the exact same position as someone, with the exact same matrix as someone, they'll be part of this group. Which actually helps as far as distribution goes.
 			gspec.multicastEnabled = true;
 			gspec.serverChannelEnabled = true;
 			gspec.objectReplicationEnabled = true;
@@ -136,7 +137,7 @@ package sfxworks.services
 			}
 			
 			//Send over to communications for handling.
-			c.addGroup(SERVICE_NAME + hash + "." + type);
+			c.addGroup(SERVICE_NAME + hash + "." + dataType, gspec);
 			if (f.name == "main" && f.extension == SPACE_FILE_EXTENSION && initComplete)
 			{
 				addToIndex(SERVICE_NAME + baToString(c.publicKey), f, permissions, extension);
@@ -169,7 +170,7 @@ package sfxworks.services
 							if (source != "embeddedobject")
 							{
 								var objectSourceFile:File = new File(source);
-								addFileToListing(objectSourceFile, RESOURCE_FILE_EXTENSION, permissions);
+								addFileToListing(objectSourceFile, RESOURCE_FILE_EXTENSION, permissions, objectSourceFile.extension);
 							}
 							
 							//Skip Rest
@@ -261,7 +262,7 @@ package sfxworks.services
 						//Put it in space directory
 						
 						addToIndex(e.groupName, new File(SPACE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObject.permissions, e.groupObject.extension);
-						writeObject(e.groupObject.data, new File(SPACE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObject.maxdata);
+						writeObject(e.groupObject.data, new File(SPACE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObjectNumber, e.groupObject.maxdata);
 					}
 					else if (e.groupName.split(".")[e.groupName.split(".").length - 1] == RESOURCE_FILE_EXTENSION)
 					{
@@ -281,7 +282,7 @@ package sfxworks.services
 							addToIndex(e.groupName, new File(RESOURCE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObject.permissions, e.groupObject.extension);
 						}
 						
-						writeObject(e.groupObject.data, new File(RESOURCE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObjectNumber, e.groupObject.maxdata);\
+						writeObject(e.groupObject.data, new File(RESOURCE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObjectNumber, e.groupObject.maxdata);
 					}
 				}
 				else
@@ -383,11 +384,6 @@ package sfxworks.services
 			}
 			
 			return returnString;
-		}
-		
-		for (var i:int = 0; i < 6; i++)
-		{
-			communications_mc.status_mc.publickey_txt.appendText(c.publicKey.readDouble().toString() + ".");
 		}
 		
 	}

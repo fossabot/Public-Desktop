@@ -67,6 +67,22 @@
     <element path="src\blooddy_crypto.swc" />
     <element path="src\fzip.swc" />
     <element path="src\coltware_airxzip_v1_0_1.swc" />
+    <element path="src\components" />
+    <element path="src\components\tweener.swc" />
+    <element path="src\components\NativeApplicationUpdater-0.5.1.swc" />
+    <element path="src\components\fzip.swc" />
+    <element path="src\components\coltware_airxzip_v1_0_1.swc" />
+    <element path="src\components\blooddy_crypto.swc" />
+    <element path="src\components\asSQL-Beta2.8.swc" />
+    <element path="src\components\as3irclib-0.0.1.swc" />
+    <element path="src\swc" />
+    <element path="src\swc\tweener.swc" />
+    <element path="src\swc\asSQL-Beta2.8.swc" />
+    <element path="src\swc\blooddy_crypto.swc" />
+    <element path="src\swc\coltware_airxzip_v1_0_1.swc" />
+    <element path="src\swc\fzip.swc" />
+    <element path="src\swc\NativeApplicationUpdater-0.5.1.swc" />
+    <element path="src\swc\as3irclib-0.0.1.swc" />
   </libraryPaths>
   <!-- External Libraries -->
   <externalLibraryPaths>

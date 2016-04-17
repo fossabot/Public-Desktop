@@ -1,4 +1,4 @@
-package {
+package TransformTool {
 	
 	import flash.events.Event;
 	import flash.geom.Matrix;

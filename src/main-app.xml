@@ -16,14 +16,13 @@
 	<text xml:lang="ja">Japanese App name goes here</text>
 	</name>
 -->
-<application xmlns="http://ns.adobe.com/air/application/17.0">
-  <id>ProjectDesktop</id>
-  <versionNumber>0.36</versionNumber>
-  <filename>ProjectDesktop</filename>
-  <description>Beta of a desktop. Handles communication using peert to peer.</description>
-  <name>ProjectDesktop</name>
-  <copyright>Samuel Walker</copyright>
-  <supportedProfiles>extendedDesktop </supportedProfiles>
+<application xmlns="http://ns.adobe.com/air/application/20.0">
+  <id>main</id>
+  <versionNumber>1.0</versionNumber>
+  <filename>main</filename>
+  <description/>
+  <name>main</name>
+  <copyright/>
   <initialWindow>
     <content>main.swf</content>
     <systemChrome>none</systemChrome>
@@ -32,17 +31,8 @@
     <fullScreen>false</fullScreen>
     <aspectRatio>portrait</aspectRatio>
     <renderMode>auto</renderMode>
-    <maximizable>true</maximizable>
-    <minimizable>false</minimizable>
-    <resizable>false</resizable>
-    
   </initialWindow>
-  <icon>
-    <image128x128>assets/128icon.png</image128x128>
-    <image48x48>assets/48icon.png</image48x48>
-    <image32x32>assets/32icon.png</image32x32>
-    <image16x16>assets/16icon.png</image16x16>
-  </icon>
+  <icon/>
   <customUpdateUI>false</customUpdateUI>
   <allowBrowserInvocation>false</allowBrowserInvocation>
-</application>
+  <supportedProfiles>desktop extendedDesktop </supportedProfiles></application>

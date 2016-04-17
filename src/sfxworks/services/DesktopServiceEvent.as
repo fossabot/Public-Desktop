@@ -29,7 +29,7 @@ package sfxworks.services
 		
 		public override function clone():Event 
 		{ 
-			return new DesktopServiceEvent(type, bubbles, cancelable);
+			return new DesktopServiceEvent(type, _file, _part, _max, _extension, bubbles, cancelable);
 		} 
 		
 		public override function toString():String 

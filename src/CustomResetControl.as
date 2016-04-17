@@ -5,8 +5,7 @@ package {
 	import flash.geom.Matrix;
 	import flash.geom.Point;
 	
-	import TransformTool;
-	import TransformToolControl;
+	import TransformTTransformTool.TransformToolControl;
 	import TransformToolCursor;
 	
 	public class CustomResetControl extends TransformToolControl {

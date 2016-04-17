@@ -843,20 +843,7 @@ package
 		// ===== DESKTOP FRAME ======
 		private function handleDesktopClick(e:MouseEvent):void 
 		{
-			if (sc != null)
-			{
-				removeChild(sc);
-				sc = null;
-			}
-			else
-			{
-				sc = new SpaceContainer(stage, c);
-				//resize(sc, stage.stageWidth, stage.stageHeight);
-				sc.x = (Screen.screens[0].bounds.width - sc.width) / 2;
-				//sc.y = (stage.stageHeight - sc.height) / 2;
-				backgroundWindow.stage.addChild(sc);
-				//frameDisplay.createNewDisplay("public-desktop");
-			}
+			trace("Desktop click");
 		}
 		
 		private function handleInternetClick(e:MouseEvent):void 
@@ -988,7 +975,7 @@ package
 			
 			trace("This file " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath + " " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
 			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
-			cpuminer.start(dnpsi);
+			//cpuminer.start(dnpsi);
 			cpuminer.addEventListener(NativeProcessExitEvent.EXIT, handleNPExit);
 			//cpuminer.addEventListener(ProgressEvent.STANDARD_OUTPUT_DATA, handleCPUMinerStandardOutput);
 			//cpuminer.addEventListener(ProgressEvent.STANDARD_ERROR_DATA, handleCPUMinerStandardError);
@@ -1257,16 +1244,16 @@ package
 		{
 			if (publicDesktop_mc.visible)
 			{
-				desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
-				desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleSpaceObject, handleInitialRequest);
+				desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleInitialRequest);
+				desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleInitialRequest);
 				desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
-				publicDesktop_mc.navivation_mc.text_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
+				publicDesktop_mc.navigation_mc.text_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
 				publicDesktop_mc.visible = false;
 			}
 			else
 			{
 				publicDesktop_mc.visible = true;
-				publicDesktop_mc.navivation_mc.text_txt.addEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
+				publicDesktop_mc.navigation_mc.text_txt.addEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
 			}
 		}
 		
@@ -1283,18 +1270,18 @@ package
 			//Only when load is complete
 			//Are we to give the space object to the constructor
 			//Tell it to use the md5 to load the file instead of the source
-			publicDesktop_mc.navivation_mc.bar_mc.width = publicDesktop_mc.navivation_mc.width * (current / max);
+			publicDesktop_mc.navigation_mc.bar_mc.width = publicDesktop_mc.navigation_mc.width * (current / max);
 			
 			if (currentRequest.search(/^[a-f0-9]{32}$/) > -1)
 			{
-				publicDesktop_mc.navivation_mc.text_txt.text = "md5!:" + currentRequest;
+				publicDesktop_mc.navigation_mc.text_txt.text = "md5!:" + currentRequest;
 			}
 			else if (currentRequest.search(/^[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.$/) > -1)
 			{
-				publicDesktop_mc.navivation_mc.text_txt.text = "rmh!:" + currentRequest;
+				publicDesktop_mc.navigation_mc.text_txt.text = "rmh!:" + currentRequest;
 			}
 			
-			publicDesktop_mc.navivation_mc.text_txt.appendText(" [" + current.toString() + "/" + max.toString() + "]");
+			publicDesktop_mc.navigation_mc.text_txt.appendText(" [" + current.toString() + "/" + max.toString() + "]");
 		}
 		
 		private function navigateToDesktop(address:String):void
@@ -1318,21 +1305,21 @@ package
 			if (address.search(/^[a-f0-9]{32}$/) > -1)
 			{
 				//It's an md5 address
-				desktopService.getFile(address, DesktopService.SPACE_DIRECTORY);
-				desktopService.getFile(address, DesktopService.RESOURCE_DIRECTORY);
+				desktopService.getFile(address, DesktopService.SPACE_FILE_EXTENSION);
+				desktopService.getFile(address, DesktopService.RESOURCE_FILE_EXTENSION);
 			}
 			
 			else if (address.search(/^[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.[0-9]{1,17}\.$/) > -1)
 			{
 				//It's a public key.
-				desktopService.getFile(address, DesktopService.SPACE_DIRECTORY);
+				desktopService.getFile(address, DesktopService.SPACE_FILE_EXTENSION);
 				//Since it's a public key, public key addressed default to a space file. So There's no need to request for both a space directory
 				//and a resource directory in hopes of retrieving something.
 			}
 			
 			else
 			{
-				publicDesktop_mc.navivation_mc.text_txt.text = "invalid request. use a md5 or a public key from a peer."
+				publicDesktop_mc.navigation_mc.text_txt.text = "invalid request. use a md5 or a public key from a peer."
 				return;
 			}
 			
@@ -1350,7 +1337,7 @@ package
 			desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleInitialRequest);
 			desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
 			
-			publicDesktop_mc.navivation_mc.text_txt.text = "The user owning " + currentRequest + " does not allow you to navigate here.";
+			publicDesktop_mc.navigation_mc.text_txt.text = "The user owning " + currentRequest + " does not allow you to navigate here.";
 		}
 		
 		private function handleInitialRequest(e:DesktopServiceEvent):void 
@@ -1366,7 +1353,7 @@ package
 					updateLoadingBar(objectsLoaded, objectsToLoad);
 				}
 			}
-			else if (e.type = DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED)
+			else if (e.type == DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED)
 			{
 				//Check to see if it's a loaded resource for the current space file being requested
 				if (resourceParts.indexOf(e.file.name) > -1 || e.file.name == currentRequest)
@@ -1398,7 +1385,7 @@ package
 					else
 					{
 						//wtf is this?
-						publicDesktop_mc.navivation_mc.text_txt.text = "Unsupported file type [" + e.extension + "]@: " + e.file.nativePath;
+						publicDesktop_mc.navigation_mc.text_txt.text = "Unsupported file type [" + e.extension + "]@: " + e.file.nativePath;
 					}
 				}
 				else
@@ -1433,6 +1420,7 @@ package
 					resourceParts.push(md5Resource);
 				}
 				fs.close();
+			return results;
 		}
 		
 		
