@@ -16,6 +16,7 @@ package sfxworks.services
 	import sfxworks.NetworkGroupEvent;
 	import flash.errors.IOError;
 	import mx.rpc.AsyncResponder;
+	import sfxworks.services.events.FileSharingEvent;
 	/**
 	 * ...
 	 * @author Samuel Jacob Walker

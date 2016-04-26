@@ -7,6 +7,8 @@ package sfxworks.services
 	import sfxworks.Communications;
 	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkGroupEvent;
+	import sfxworks.services.events.NodeEvent;
+	import sfxworks.services.events.SocialNetworkServiceEvent;
 	
 	/**
 	 * ...

@@ -1,6 +1,7 @@
-package sfxworks.services 
+package sfxworks.services.nodes 
 {
 	import flash.events.EventDispatcher;
+	import sfxworks.services.events.NodeEvent;
 	
 	/**
 	 * ...

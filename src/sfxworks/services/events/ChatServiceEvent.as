@@ -1,4 +1,4 @@
-package sfxworks.services 
+package sfxworks.services.events 
 {
 	import flash.events.Event;
 	

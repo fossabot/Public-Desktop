@@ -9,6 +9,7 @@ package sfxworks.services
 	import sfxworks.Communications;
 	import sfxworks.NetworkGroupEvent;
 	import by.blooddy.crypto.MD5;
+	import sfxworks.services.events.DesktopServiceEvent;
 	/**
 	 * ...
 	 * @author Samuel Jacob Walker
@@ -80,6 +81,7 @@ package sfxworks.services
 						if (file.exists)
 						{
 							addFileToListing(file, dataType, indexObject.permission, indexObject.extension);
+							
 						}
 						else
 						{
@@ -125,7 +127,10 @@ package sfxworks.services
 			fs.open(f, FileMode.READ)
 				fs.readBytes(tmp, 0, f.size);
 				fs.close();
-			var hash:String = MD5.hashBytes(tmp);
+			var hash:String = MD5.hashBytes(tmp); //TODO: WARNING: No handler for incomplete/interrupted resource files. will simply create a new group.
+			//Security is good since it will prevent modifications of file @ source for malitious distribution, but need to add garbage colletor
+			//Will probably ocassionaly run a scanner/cleaner to match name of md5.dsource with actual generated md5. if not matching, deletion and possibly refetching
+			
 			var gspec:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + hash + "." + dataType); //Tecnically if someone has the exact same video in the exact same position as someone, with the exact same matrix as someone, they'll be part of this group. Which actually helps as far as distribution goes.
 			gspec.multicastEnabled = true;
 			gspec.serverChannelEnabled = true;
@@ -180,14 +185,18 @@ package sfxworks.services
 						}
 						fs.close();
 				}
+				//If it finds the group name in the Index && the extension for the group is .dsource
 				else if(gnames.indexOf(e.groupName) > -1 && e.groupName.split(".")[1] == RESOURCE_FILE_EXTENSION) //Source file (owned)
 				{
 					c.addHaveObject(e.groupName, 0, Math.ceil(gfiles[gnames.indexOf(e.groupName)].size / FILE_DIVIDE));
 				}
+				//if it has a .dpsace file extension (The scenario where it is owned is already captured, so this will be a foreign file)
 				else if (e.groupName.split(".")[e.groupName.split(".").length - 1] == SPACE_FILE_EXTENSION) //Space File (not owned)
 				{
 					c.addWantObject(e.groupName, 0, 0);
 				}//               get the last split from the . (in cases where it includes a public key
+				
+				//if it has a .dsource file extension (The scenario where it is owned is already captured, so this will be a foreign file)
 				else if (e.groupName.split(".")[e.groupName.split(".").length - 1] == RESOURCE_FILE_EXTENSION) //Source File (not owned)
 				{
 					c.addWantObject(e.groupName, 0, 0);
@@ -261,16 +270,12 @@ package sfxworks.services
 						//Split off the desktop service to get MD5.dspace
 						//Put it in space directory
 						
-						addToIndex(e.groupName, new File(SPACE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObject.permissions, e.groupObject.extension);
-						writeObject(e.groupObject.data, new File(SPACE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObjectNumber, e.groupObject.maxdata);
+						addToIndex(e.groupName, new File(SPACE_DIRECTORY.nativePath + File.separator + e.groupName.substr(SERVICE_NAME.length)), e.groupObject.permissions, e.groupObject.extension);
+						writeObject(e.groupObject.data, new File(SPACE_DIRECTORY.nativePath + File.separator + e.groupName.substr(SERVICE_NAME.length)), e.groupObjectNumber, e.groupObject.maxdata);
 					}
 					else if (e.groupName.split(".")[e.groupName.split(".").length - 1] == RESOURCE_FILE_EXTENSION)
 					{
-						if (gnames.indexOf(e.groupName) > -1)
-						{
-							//Already knows the file
-						}
-						else
+						if (gnames.indexOf(e.groupName) == -1)
 						{
 							//Doesn't have details on the file.
 							//Write object
@@ -278,11 +283,11 @@ package sfxworks.services
 							{
 								c.addWantObject(e.groupName, 1, e.groupObject.maxdata);
 							}
-							
-							addToIndex(e.groupName, new File(RESOURCE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObject.permissions, e.groupObject.extension);
+							//                               PathToResourceDir                      /                  somerandommd5.dsource                 permissions data     the ORIGIONAL file's extension 
+							addToIndex(e.groupName, new File(RESOURCE_DIRECTORY.nativePath + File.separator + e.groupName.substr(SERVICE_NAME.length)), e.groupObject.permissions, e.groupObject.extension);
 						}
 						
-						writeObject(e.groupObject.data, new File(RESOURCE_DIRECTORY.nativePath + e.groupName.substr(SERVICE_NAME.length)), e.groupObjectNumber, e.groupObject.maxdata);
+						writeObject(e.groupObject.data, new File(RESOURCE_DIRECTORY.nativePath + File.separator + e.groupName.substr(SERVICE_NAME.length)), e.groupObjectNumber, e.groupObject.maxdata);
 					}
 				}
 				else
@@ -298,7 +303,8 @@ package sfxworks.services
 			//Write to drive
 			var fs:FileStream = new FileStream();
 			fs.open(target, FileMode.WRITE);
-				fs.writeBytes(data, position * FILE_DIVIDE, data.bytesAvailable);
+				fs.position = position * FILE_DIVIDE;
+				fs.writeBytes(data, 0, data.bytesAvailable);
 				fs.close();
 			
 			/* Why did I put this here?

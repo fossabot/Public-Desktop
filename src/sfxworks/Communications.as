@@ -20,11 +20,12 @@ package sfxworks
 	import flash.net.GroupSpecifier;
 	import flash.net.NetConnection;
 	import flash.net.NetGroup;
+	import flash.net.NetStream;
 	import flash.net.URLLoader;
 	import flash.net.URLRequest;
 	import flash.utils.ByteArray;
 	import flash.utils.Timer;
-	import mx.rpc.AsyncResponder;
+		
 	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkEvent;
 	import sfxworks.NetworkGroupEvent;
@@ -64,9 +65,16 @@ package sfxworks
 		private var groups:Vector.<NetGroup>;
 		private var groupNames:Vector.<String>;
 		
-		//Mysql Group Management: For netstream groups, registered to the database
-		private var nsGroupNames:Vector.<String>;
 		
+		//PublicKey and data management
+		//||
+		private static const PUBLIC_DATA_STORAGE:String = "CORE-COMMUNICATIONS-PUBLICDB";
+		private var publicDataI:NetStream; //Inbound
+		private var publicDataO:NetStream; //Outbound
+		private var pdsGspec:GroupSpecifier;
+		
+		private var publicDataIConnected:Boolean = false;
+		private var publicDataOConnected:Boolean = false;
 		
 		
 		public function Communications() 
@@ -82,11 +90,10 @@ package sfxworks
 			
 			groups = new Vector.<NetGroup>();
 			groupNames = new Vector.<String>();
-			nsGroupNames = new Vector.<String>();
 			
 			timerRefresh = new Timer(10000);
 			
-			_netConnection.connect("-" + "-");
+			_netConnection.connect("rtmfp://p2p.rtmfp.net/" + "667ccd1db3561717cb1b3e6a-696258f80d5e");
 			_netConnection.addEventListener(NetStatusEvent.NET_STATUS, handleNetworkStatus);
 			/* Send objects
 			 * Send messages
@@ -221,9 +228,12 @@ package sfxworks
 			switch(e.info.code)
 			{ 
 				case "NetConnection.Connect.Success":
-					trace("COMMUNICATIONS: Net connection successful. Init mysql connection.");
+					trace("COMMUNICATIONS: Net connection successful. P2P public DB connection.");
 					_nearID = _netConnection.nearID;
-					mysql();
+					
+					//p2pdb();
+					//P2P Publid data storage.
+					
 					break; 
 				case "NetConnection.Connect.Closed":
 					dispatchEvent(new NetworkEvent(NetworkEvent.DISCONNECTED, _netConnection.nearID));
@@ -280,15 +290,52 @@ package sfxworks
 			getGroup(groupName).sendToAllNeighbors(object);
 		}
 		
-		private function mysql():void
+		private function p2pdb():void
 		{
-			mysqlConnection = new Connection("-", 9001, "-", "-", "-");
-			mysqlConnection.connect();
-			mysqlConnection.addEventListener(Event.CONNECT, handleMysqlConnection);
-			mysqlConnection.addEventListener(IOErrorEvent.IO_ERROR, handleIOError);
-			mysqlConnection.addEventListener(SecurityErrorEvent.SECURITY_ERROR, handleSecurityError);
-			trace("COMMUNICATIONS: Attemting to connect to mysql main server");
+			var gspec:GroupSpecifier = new GroupSpecifier("CORE-COMMUNICATIONS-PUBLICDB");
+			gspec.objectReplicationEnabled = true;
+			gspec.serverChannelEnabled = true;
+			gspec.multicastEnabled = true;
+			
+			this.addGroup("CORE-COMMUNICATIONS-PUBLICDB", gspec);
+			addEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
 		}
+		//   ^ v
+		private function handleSuccessfulGroupConnection(e:NetworkGroupEvent):void 
+		{
+			if (e.groupName == "CORE-COMMUNICATIONS-PUBLICDB")
+			{
+				removeEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
+				addEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulStreamConnection);
+				publicDataI = new NetStream(_netConnection, pdsGspec.groupspecWithoutAuthorizations());
+				publicDataO = new NetStream(_netConnection, pdsGspec.groupspecWithoutAuthorizations());
+			}
+		}
+		
+		private function handleSuccessfulStreamConnection(e:NetworkActionEvent):void 
+		{
+			if (e.info == publicDataI)
+			{
+				publicDataIConnected = true;
+				publicDataI.play("stream");
+			}
+			else if (e.info = publicDataO)
+			{
+				publicDataOConnected = true;
+				publicDataO.publish("stream");
+			}
+			
+			if (publicDataIConnected && publicDataOConnected)
+			{
+				removeEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulStreamConnection);
+				
+				//Get updated db | own format
+				//Accuracy of records may vary by second depending on broadcast speed vs object get. Might need a few guiders/supervisors who will have dominant say
+				
+			}
+		}
+		
+		
 		
 		private function handleMysqlConnection(e:Event):void 
 		{
@@ -344,53 +391,6 @@ package sfxworks
 		{
 			checkForUpdate();
 			checkGroups();
-		}
-		
-		private function checkGroups():void 
-		{
-			//Have Communications check for new members/no longer existing members every minute.
-			//If a new entry in the table, dispatch event with nearid and publickey
-			//trace("COMMUNICATIONS: Checking groups..");
-			for each (var ngGroup:String in nsGroupNames)
-			{
-				trace("COMMUNICATIONS: Handling group " + ngGroup);
-				
-				var retrieval:Statement =  mysqlConnection.createStatement();
-				retrieval.sql = "SELECT * FROM `" + ngGroup + "`";
-				
-				var t:MySqlToken = retrieval.executeQuery();
-				t.addResponder(new AsyncResponder(handleNgGroupRefresh, mysqlError, t));
-				
-				//Puting a function inside a function inside a for loop o.0000
-				function handleNgGroupRefresh(info:Object, token:MySqlToken)
-				{
-					trace("COMMUNICATIONS: Primary response successful.");
-					var rs:ResultSet = new ResultSet(token);
-					for (var i:int = 0; i < rs.numColumns; i++)
-					{
-						//Get list of public keys from table
-						var s:Statement = mysqlConnection.createStatement();
-						s.sql = "SELECT * from `users` WHERE `publickey`=?;";
-						s.setBinary(1, rs.getBinary("publickey"));
-						var t:MySqlToken = s.executeQuery();
-						t.addResponder(new AsyncResponder(fetchNearIDFromKeySuccess, mysqlError, t));
-						
-						//Get user info using publickey
-						function fetchNearIDFromKeySuccess(info:Object, token:MySqlToken):void
-						{
-							trace("COMMUNICATIONS: Secondary response successful.");
-							var secondaryRS:ResultSet = new ResultSet(token);
-							var userData:Object = new Object();
-							userData.nearid = secondaryRS.getString("nearid");
-							userData.name = secondaryRS.getString("name");
-							userData.publickey = secondaryRS.getBinary("publickey");
-							
-							//Dispatch event with created object
-							dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.USER_DATA, ngGroup, userData));
-						}
-					} //For each coulumn, dispatch an event with userdata. Communications does not take account for new, existing, or nonexisting users
-				}
-			}
 		}
 		
 		private function checkForUpdate():void 
@@ -494,42 +494,6 @@ package sfxworks
 			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, info));
 		}
 		
-		
-		//For mysql registered groups.
-		public function addNetstreamGroup(name:String):void
-		{
-			//Clear schema every day if application doesnt remove them first.
-			//(database garbage collection) [database operation]
-			
-			mysqlConnection.changeDatabaseTo("applicationgroups");
-			var st:Statement = mysqlConnection.createStatement();
-			
-			//Create the group's table. If it already exists it will 
-			st.sql = "CREATE TABLE `" + name + "` ("
-				+    "`publickey` BLOB;"
-			
-			//Add application's connection info to the group.
-			var secondary:Statement = mysqlConnection.createStatement();
-			secondary.sql = "INSERT INTO `" + name + "` (`publickey`)"
-			              + "VALUES (?)";
-			secondary.setBinary(1, _publicKey);
-			
-			var firstToken:MySqlToken = st.executeQuery();
-			firstToken.addResponder(new AsyncResponder(mysqlSuccess, mysqlError, firstToken));
-			
-			var t:MySqlToken = secondary.executeQuery();
-			t.addResponder(new AsyncResponder(handleNSGroupCreation, mysqlError, t));
-			
-			function handleNSGroupCreation(data:Object, token:MySqlToken):void
-			{
-				var rs:ResultSet = new ResultSet(token);
-				if (rs.next())
-				{
-					nsGroupNames.push(name);
-					dispatchEvent(new NetworkGroupEvent(NetworkGroupEvent.CONNECTION_SUCCESSFUL, name));
-				}
-			}
-		}
 		
 		//Add method to change group name
 		

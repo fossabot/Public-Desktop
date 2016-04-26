@@ -46,13 +46,13 @@ package
 	import sfxworks.NetworkEvent;
 	import sfxworks.NetworkUserEvent;
 	import sfxworks.services.ChatService;
-	import sfxworks.services.ChatServiceEvent;
+	import sfxworks.services.events.ChatServiceEvent;
 	import sfxworks.services.DesktopService;
-	import sfxworks.services.DesktopServiceEvent;
-	import sfxworks.services.FileSharingEvent;
+	import sfxworks.services.events.DesktopServiceEvent;
+	import sfxworks.services.events.FileSharingEvent;
 	import sfxworks.services.FileSharingService;
 	import sfxworks.services.VoiceService;
-	import sfxworks.services.VoiceServiceEvent;
+	import sfxworks.services.events.VoiceServiceEvent;
 	import sfxworks.Space;
 	import sfxworks.SpaceContainer;
 	import sfxworks.UpdateEvent;
