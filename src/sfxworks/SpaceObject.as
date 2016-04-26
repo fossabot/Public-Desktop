@@ -115,6 +115,7 @@
 				 
 				v = new Video();
 				v.attachNetStream(ns);
+				this.buttonMode = true;
 				addChild(v);
 				
 				//Add args to handle pause and play
