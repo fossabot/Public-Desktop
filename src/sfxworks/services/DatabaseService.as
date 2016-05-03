@@ -136,7 +136,7 @@ package sfxworks.services
 				//Write db file.
 				var fs:FileStream = new FileStream();
 				fs.open(new File(DATABASE_DIRECTORY.nativePath + File.separator + e.groupName.substr(SERVICE_NAME.length) + ".db"), FileMode.WRITE);
-					fs.writeBytes(e.groupObject.data as ByteArray, 0, e.groupObject.data.length as ByteArray);
+					fs.writeBytes(e.groupObject as ByteArray, 0, e.groupObject.length as ByteArray);
 					fs.close();
 				
 				
