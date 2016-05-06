@@ -1,7 +1,13 @@
 package sfxworks.services 
 {
 	import by.blooddy.crypto.MD5;
+	import flash.data.SQLConnection;
+	import flash.data.SQLMode;
+	import flash.data.SQLResult;
+	import flash.data.SQLStatement;
 	import flash.events.EventDispatcher;
+	import flash.events.SQLErrorEvent;
+	import flash.events.SQLEvent;
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
 	import flash.filesystem.FileStream;
@@ -19,7 +25,7 @@ package sfxworks.services
 	public class DatabaseService extends EventDispatcher
 	{
 		public static const SERVICE_NAME:String = "DATABASE_SERVICE";
-		public static const DATABASE_DIRECTORY:File = File.applicationStorageDirectory.resolvePath("database");
+		public static const DATABASE_DIRECTORY:File = File.applicationStorageDirectory.resolvePath("database" + File.separator);
 		
 		private var communications:Communications;
 		
@@ -27,22 +33,21 @@ package sfxworks.services
 		private var gspecs:Vector.<GroupSpecifier>;
 		private var netstreamI:Vector.<NetStream>;
 		private var netstreamO:Vector.<NetStream>;
-		//private var phase:Vector.<String>; //create | update
-		//Create: Makes the database. Gets all objects before writing
-		//Update: Someone either increased the max, or wants to update an object at a position 
+		private var sqlConnection:Vector.<SQLConnection>;
+		private var active:Vector.<Boolean>;
 		
-		//SQL FORMAT:
-		//Number | Object
-		// int   | bytearray
+		//SQL FORMAT: //db [object number, md5, object (serialized), date]
 		
 		public function DatabaseService(c:Communications) 
 		{
 			communications = c;
 			
+			active = new Vector.<Boolean>();
 			databaseName = new Vector.<String>();
 			gspecs = new Vector.<GroupSpecifier>();
 			netstreamI = new Vector.<NetStream>();
 			netstreamO = new Vector.<NetStream>();
+			sqlConnection = new Vector.<SQLConnection>();
 			
 			communications.addEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
 			communications.addEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulNetworkAction);
@@ -51,7 +56,7 @@ package sfxworks.services
 		}
 		
 		
-		public function connectToDatabase(name:String, type:String) //TODO: TWO types. Syncronous (all databases are the stame) vs Mass (attemps to use as much space as possible with as much avalibility as possible prioritizing storage on highly active users and replicating on others)
+		public function connectToDatabase(name:String, type:String, encryptionKey:ByteArray=null) //TODO: TWO types. Syncronous (all databases are the stame) vs Mass (attemps to use as much space as possible with as much avalibility as possible prioritizing storage on highly active users and replicating on others)
 		{	
 			//1: Establish group connection
 			var gspec:GroupSpecifier = new GroupSpecifier(name);
@@ -61,12 +66,49 @@ package sfxworks.services
 			
 			communications.addGroup(SERVICE_NAME + name, gspec);
 			
+			//2: Establish local connection
+			var dbFile:File = new File(DATABASE_DIRECTORY.nativePath + name + ".db");
+			var conn:SQLConnection = new SQLConnection();
+			//TODO: Handle error with improper encryption key
+			conn.openAsync(dbFile, SQLMode.CREATE, null, true, 1024, encryptionKey);
+			conn.addEventListener(SQLEvent.OPEN, handleNewLocalDatabase);
+			
+			sqlConnection.push(conn);
 			databaseName.push(name);
 			gspecs.push(gspec);
 			netstreamI.push(new NetStream());
 			netstreamO.push(new NetStream());
-			//2: Get updates
-			//3: Stay in sync
+		}
+		
+		private function handleNewLocalDatabase(e:SQLEvent):void 
+		{
+			conn.removeEventListener(SQLEvent.OPEN, handleNewLocalDatabase);
+			
+			var statement:SQLStatement = new SQLStatement();
+			statement.sqlConnection = e.target;
+			
+			var sql:String = "CREATE TABLE IF NOT EXISTS objects (" +  
+			"    objectNumber INTEGER PRIMARY KEY, " +  
+			"    md5 TEXT, " +  
+			"    object Object, " +  
+			"    date Date" +  
+			")"; 
+			
+			statement.text = sql;
+			statement.execute();
+			
+			statement.addEventListener(SQLEvent.RESULT, handleSuccessfulDatabaseSetup);
+		}
+		
+		private function handleSuccessfulTableCreation(e:SQLEvent):void 
+		{
+			e.target.removeEventListener(SQLEvent.RESULT, handleSuccessfulDatabaseSetup);
+			
+			if (netstreamI[sqlConnection.indexOf(e.target)] != null)
+			{
+				(netstreamI[sqlConnection.indexOf(e.target)].client as DatabaseServiceNodeClient).active = true;
+			}
+			active[sqlConnection.indexOf(e.target)] = true;
 		}
 		
 		private function handleSuccessfulGroupConnection(e:NetworkGroupEvent):void 
@@ -77,9 +119,8 @@ package sfxworks.services
 				netstreamI[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))] = new NetStream(communications.netConnection, gspecs[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))]);
 				netstreamO[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))] = new NetStream(communications.netConnection, gspecs[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))]);
 				
-				//First object is max number
-				communications.addWantObject(e.groupName.split(SERVICE_NAME.length), 0, 0);
-				
+				//Get all possible objects [Objcets are split for faster initial retrieval of database]
+				communications.addWantObject(e.groupName.split(SERVICE_NAME.length), 0, Number.MAX_VALUE);
 			}
 		}
 		
@@ -89,6 +130,8 @@ package sfxworks.services
 			{
 				netstreamI[netstreamI.indexOf(e.info)].play("stream");
 				netstreamI[netstreamI.indexOf(e.info)].client = new DatabaseServiceNodeClient(databaseName[netstreamI.indexOf(e.info)]);
+				
+				(netstreamI[netstreamI.indexOf(e.info)].client as DatabaseServiceNodeClient).active = active[netstreamI.indexOf(e.info)];
 			}
 			else if (netstreamO.indexOf(e.info) > -1)
 			{
@@ -99,50 +142,37 @@ package sfxworks.services
 		
 		private function handleObjectRequest(e:NetworkGroupEvent):void 
 		{
-			if (e.groupObjectNumber == 0)
-			{
-				
-			}
+			var sqlStatement:SQLStatement = new SQLStatement();
+			sqlStatement.sqlConnection = sqlConnection[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))]
+			sqlStatement.text = "SELECT object, md5, date FROM object WHERE objectNumber = " + e.groupObjectNumber.toString();
+			sqlStatement.addEventListener(SQLEvent.RESULT, handleSqlResult);
+			sqlStatement.addEventListener(SQLErrorEvent.ERROR, handleSqlError);
+		}
+		
+		private function handleSqlError(e:SQLErrorEvent):void 
+		{
+			e.target.removeEventListener(SQLEvent.RESULT, handleSqlResult);
+			e.target.removeEventListener(SQLErrorEvent.ERROR, handleSqlError);
+			
+			trace(e.errorID + ":" + e.error);
+			//TODO: Test whether or not the database will throw an error if it can't find the record
+		}
+		
+		private function handleSqlResult(e:SQLEvent):void 
+		{
+			e.target.removeEventListener(SQLEvent.RESULT, handleSqlResult);
+			e.target.removeEventListener(SQLErrorEvent.ERROR, handleSqlError);
+			
+			var result:SQLResult = e.target.getResult(); 
+			var row:Object = result.data[0];
+			communications.satisfyObjectRequest(SERVICE_NAME + databaseName[sqlConnection.indexOf(e.target.sqlConnection)], row.objectNumber, row.object);
 		}
 		
 		private function handleObjectRecieved(e:NetworkGroupEvent):void 
 		{
-			if (e.groupObjectNumber == 0) //Meta data
-			{
-				//It's the metadata
-				//Contains: Md5, max entries
-				
-				//TODO: No idea if when adobe air inserts something into a database, it adds a timestamp or something that would make the
-				//content of the database the same but the md5s different, but lets see if this works
-				
-				var fs:FileStream = new FileStream();
-				var database:File = new File(DATABASE_DIRECTORY.nativePath + File.separator + e.groupName.substr(SERVICE_NAME) + ".db");
-				var raw:ByteArray = new ByteArray();
-				
-				fs.open(database, FileMode.READ)
-					fs.readBytes(raw, 0, database.size);
-					fs.close();
-					
-				if (e.groupObject.md5 != MD5.hashBytes(raw))
-				{
-					//Database raw file = object 1.
-					//Get database.
-					communications.addWantObject(e.groupName, 1, 1);
-				}
-				
-			}
-			else if (e.groupObjectNumber == 1) //.db file
-			{
-				//Write db file.
-				var fs:FileStream = new FileStream();
-				fs.open(new File(DATABASE_DIRECTORY.nativePath + File.separator + e.groupName.substr(SERVICE_NAME.length) + ".db"), FileMode.WRITE);
-					fs.writeBytes(e.groupObject as ByteArray, 0, e.groupObject.length as ByteArray);
-					fs.close();
-				
-				
-				//Flush queries from Inbound stream
-				(netstreamI[databaseName.indexOf(e.groupName.substr(SERVICE_NAME.length))].client as DatabaseServiceNodeClient).activate();
-			}
+			//db [object number, md5, object (serialized)]
+			
+			trace("New database object");
 		}
 		
 	}
