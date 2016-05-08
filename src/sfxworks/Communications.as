@@ -25,6 +25,7 @@ package sfxworks
 	import flash.net.URLRequest;
 	import flash.utils.ByteArray;
 	import flash.utils.Timer;
+	import sfxworks.services.DatabaseService;
 		
 	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkEvent;
@@ -38,6 +39,7 @@ package sfxworks
 		private var _netConnection:NetConnection;
 		private var mysqlConnection:Connection;
 		
+		private var _databaseService:DatabaseService;
 		
 		//MyIdentity
 		private var _name:String;
@@ -150,7 +152,7 @@ package sfxworks
 		
 		public function addWantObject(groupName:String, startIndex:Number, endIndex:Number):void //Requests objects from the group.
 		{
-			groups[groupName.indexOf(groupName)].addWantObjects(startIndex, endIndex);
+			groups[groupName.indexOf(groupName)].addWantObjects(startInded, endIndex);
 		}
 		
 		public function addHaveObject(groupName:String, startIndex:Number, endIndex:Number):void //Adds a list of object the service, or whatever calls on commuication has.
@@ -231,7 +233,7 @@ package sfxworks
 					trace("COMMUNICATIONS: Net connection successful. P2P public DB connection.");
 					_nearID = _netConnection.nearID;
 					
-					//p2pdb();
+					p2pdb();
 					//P2P Publid data storage.
 					
 					break; 
@@ -290,8 +292,14 @@ package sfxworks
 			getGroup(groupName).sendToAllNeighbors(object);
 		}
 		
+		
+		//    v
 		private function p2pdb():void
 		{
+			_databaseService = new DatabaseService(this);
+			_databaseService.connectToDatabase("CORE-COMMUNICATIONS-PUBLICDB");
+			_databaseService
+			
 			var gspec:GroupSpecifier = new GroupSpecifier("CORE-COMMUNICATIONS-PUBLICDB");
 			gspec.objectReplicationEnabled = true;
 			gspec.serverChannelEnabled = true;
@@ -300,41 +308,7 @@ package sfxworks
 			this.addGroup("CORE-COMMUNICATIONS-PUBLICDB", gspec);
 			addEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
 		}
-		//   ^ v
-		private function handleSuccessfulGroupConnection(e:NetworkGroupEvent):void 
-		{
-			if (e.groupName == "CORE-COMMUNICATIONS-PUBLICDB")
-			{
-				removeEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
-				addEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulStreamConnection);
-				publicDataI = new NetStream(_netConnection, pdsGspec.groupspecWithoutAuthorizations());
-				publicDataO = new NetStream(_netConnection, pdsGspec.groupspecWithoutAuthorizations());
-			}
-		}
-		
-		private function handleSuccessfulStreamConnection(e:NetworkActionEvent):void 
-		{
-			if (e.info == publicDataI)
-			{
-				publicDataIConnected = true;
-				publicDataI.play("stream");
-			}
-			else if (e.info = publicDataO)
-			{
-				publicDataOConnected = true;
-				publicDataO.publish("stream");
-			}
-			
-			if (publicDataIConnected && publicDataOConnected)
-			{
-				removeEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulStreamConnection);
-				
-				//Get updated db | own format
-				//Accuracy of records may vary by second depending on broadcast speed vs object get. Might need a few guiders/supervisors who will have dominant say
-				
-			}
-		}
-		
+		//   ^ 
 		
 		
 		private function handleMysqlConnection(e:Event):void 
@@ -465,6 +439,11 @@ package sfxworks
 		public function get netConnection():NetConnection 
 		{
 			return _netConnection;
+		}
+		
+		public function get databaseService():DatabaseService 
+		{
+			return _databaseService;
 		}
 		
 		public function nameChange(name:String):void
