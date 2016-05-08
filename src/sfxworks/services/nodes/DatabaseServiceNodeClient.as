@@ -17,6 +17,10 @@ package sfxworks.services.nodes
 		private var _active:Boolean;
 		private var sqlConnection:SQLConnection;
 		
+		//ToDo: Add some sort of mech to detect whether or not db has all objects and is ready to handle new data submissions
+		//... debate on whether or not to auto add HaveObjects or to scan for them at an interval depending on local mods to db
+		
+		
 		public function DatabaseServiceNodeClient(name:String, connection:SQLConnection) 
 		{
 			databaseName = new String(name);
