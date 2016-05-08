@@ -17,6 +17,7 @@ package sfxworks.services
 	import sfxworks.Communications;
 	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkGroupEvent;
+	import sfxworks.services.events.DatabaseServiceEvent;
 	import sfxworks.services.nodes.DatabaseServiceNodeClient;
 	/**
 	 * ...
@@ -82,12 +83,12 @@ package sfxworks.services
 		
 		private function handleNewLocalDatabase(e:SQLEvent):void 
 		{
-			conn.removeEventListener(SQLEvent.OPEN, handleNewLocalDatabase);
+			e.target.removeEventListener(SQLEvent.OPEN, handleNewLocalDatabase);
 			
 			var statement:SQLStatement = new SQLStatement();
 			statement.sqlConnection = e.target;
 			
-			var sql:String = "CREATE TABLE IF NOT EXISTS objects (" +  
+			var sql:String = "CREATE TABLE IF NOT EXISTS Objects (" +  
 			"    objectNumber INTEGER PRIMARY KEY, " +  
 			"    md5 TEXT, " +  
 			"    object Object, " +  
@@ -140,11 +141,12 @@ package sfxworks.services
 			}
 		}
 		
+		//                        == Object Request ===
 		private function handleObjectRequest(e:NetworkGroupEvent):void 
 		{
 			var sqlStatement:SQLStatement = new SQLStatement();
 			sqlStatement.sqlConnection = sqlConnection[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))]
-			sqlStatement.text = "SELECT object, md5, date FROM object WHERE objectNumber = " + e.groupObjectNumber.toString();
+			sqlStatement.text = "SELECT object, md5, date FROM object WHERE objectNumber = " + e.groupObjectNumber.toString() + ";";
 			sqlStatement.addEventListener(SQLEvent.RESULT, handleSqlResult);
 			sqlStatement.addEventListener(SQLErrorEvent.ERROR, handleSqlError);
 		}
@@ -155,6 +157,7 @@ package sfxworks.services
 			e.target.removeEventListener(SQLErrorEvent.ERROR, handleSqlError);
 			
 			trace(e.errorID + ":" + e.error);
+			dispatchEvent(e);
 			//TODO: Test whether or not the database will throw an error if it can't find the record
 		}
 		
@@ -168,12 +171,55 @@ package sfxworks.services
 			communications.satisfyObjectRequest(SERVICE_NAME + databaseName[sqlConnection.indexOf(e.target.sqlConnection)], row.objectNumber, row.object);
 		}
 		
+		//Is regiserClassAlies Global?
+		//                      == Object Recieved == [Initial object retrieval (for downloading of database)]
 		private function handleObjectRecieved(e:NetworkGroupEvent):void 
 		{
-			//db [object number, md5, object (serialized)]
+			//db [object number, md5, object]
 			
-			trace("New database object");
+			var statement:SQLStatement = new SQLStatement();
+			statement.sqlConnection = sqlConnection[databaseName.indexOf(e.groupName.substr(SERVICE_NAME.length))];
+			statement.text = "insert or replace into Objects (objectNumber, md5, object, date) values"
+				+ "((select objectNumber from Objects where objectNumber = " + e.groupObjectNumber.toString() + "), '" + MD5.hashBytes(e.groupObject as ByteArray) + "', @object, @date);";
+			statement.parameters["@object"] = e.groupObject;
+			statement.parameters["@date"] = new Date();
+			
+			statement.execute();
 		}
+		
+		
+		//Submittion of data
+		public function submitData(dbName:String, sqlStatement:SQLStatement):void
+		{
+			//Connection should be null.
+			
+			//Send to network (All the databases in the network group)
+			netstreamI[databaseName.indexOf(dbName)].send("query", sqlStatement);
+			//Update local
+			sqlStatement.sqlConnection = sqlConnection[databaseName.indexOf(dbName)];
+			sqlStatement.addEventListener(SQLErrorEvent.ERROR, handleSqlError);
+			sqlStatement.execute();
+		}
+		
+		public function queryLocalDB(dbName:String, sqlStatement:SQLStatement):void
+		{
+			function handleLocalDBResult(e:SQLEvent):void //function inside function to get proper dbname because asyncronous and unpredictability of which db was called in what order and which one would finish first
+			{
+				sqlStatement.removeEventListener(SQLEvent.RESULT, handleLocalDBResult);
+				sqlStatement.removeEventListener(SQLErrorEvent.ERROR, handleSqlError);
+				//Attach result to dse with database name
+				dispatchEvent(new DatabaseServiceEvent(DatabaseServiceEvent.RESULT_DATA, dbName, e.target.getResult()));
+			}
+			
+			sqlStatement.sqlConnection = sqlConnection[databaseName.indexOf(dbName)];
+			sqlStatement.addEventListener(SQLEvent.RESULT, handleLocalDBResult);
+			sqlStatement.addEventListener(SQLErrorEvent.ERROR, handleSqlError);
+			sqlStatement.execute();
+			
+		}
+		
+		
+		
 		
 	}
 

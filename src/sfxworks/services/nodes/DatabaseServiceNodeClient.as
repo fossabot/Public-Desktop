@@ -4,6 +4,7 @@ package sfxworks.services.nodes
 	import flash.data.SQLStatement;
 	import flash.events.EventDispatcher;
 	import flash.events.IEventDispatcher;
+	import flash.net.registerClassAlias;
 	
 	/**
 	 * ...
@@ -12,7 +13,7 @@ package sfxworks.services.nodes
 	public class DatabaseServiceNodeClient extends EventDispatcher 
 	{
 		private var databaseName:String;
-		private var queries:Vector.<String>; //Later on, organize queries so that an add would come before an update in the case where the updaate query reached this client instead of an add
+		private var queries:Vector.<SQLStatement>;
 		private var _active:Boolean;
 		private var sqlConnection:SQLConnection;
 		
@@ -20,6 +21,8 @@ package sfxworks.services.nodes
 		{
 			databaseName = new String(name);
 			sqlConnection = connection;
+			registerClassAlias("flash.data.SqlStatement", SQLStatement);
+			registerClassAlias("flash.events.EventDispatcher", EventDispatcher);
 		}
 		
 		public function query(query:SQLStatement):void
@@ -28,7 +31,6 @@ package sfxworks.services.nodes
 			{
 				var statement:SQLStatement = new SQLStatement();
 				statement.sqlConnection = sqlConnection;
-				statement.text = query;
 				statement.execute();
 			}
 			else
@@ -48,7 +50,12 @@ package sfxworks.services.nodes
 			_active = value;
 			if (value)
 			{
-				//Flush query
+				for each (var query:SQLStatement in queries)
+				{
+					query.sqlConnection = sqlConnection;
+					query.execute();
+				}
+				queries = new Vector.<SQLStatement>();
 			}
 		}
 		
