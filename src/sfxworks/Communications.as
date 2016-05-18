@@ -5,8 +5,11 @@ package sfxworks
 	import com.maclema.mysql.MySqlToken;
 	import com.maclema.mysql.ResultSet;
 	import com.maclema.mysql.Statement;
+	import flash.data.SQLResult;
+	import flash.data.SQLStatement;
 	import flash.desktop.NativeApplication;
 	import flash.errors.IOError;
+	import flash.errors.SQLError;
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
 	import flash.events.IOErrorEvent;
@@ -26,6 +29,7 @@ package sfxworks
 	import flash.utils.ByteArray;
 	import flash.utils.Timer;
 	import sfxworks.services.DatabaseService;
+	import sfxworks.services.events.DatabaseServiceEvent;
 		
 	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkEvent;
@@ -40,6 +44,7 @@ package sfxworks
 		private var mysqlConnection:Connection;
 		
 		private var _databaseService:DatabaseService;
+		private static const PUBLIC_KEY_DATABASE:String = "COMMUNICATIONS-PKDB";
 		
 		//MyIdentity
 		private var _name:String;
@@ -70,14 +75,6 @@ package sfxworks
 		
 		//PublicKey and data management
 		//||
-		private static const PUBLIC_DATA_STORAGE:String = "CORE-COMMUNICATIONS-PUBLICDB";
-		private var publicDataI:NetStream; //Inbound
-		private var publicDataO:NetStream; //Outbound
-		private var pdsGspec:GroupSpecifier;
-		
-		private var publicDataIConnected:Boolean = false;
-		private var publicDataOConnected:Boolean = false;
-		
 		
 		public function Communications() 
 		{
@@ -292,34 +289,45 @@ package sfxworks
 			getGroup(groupName).sendToAllNeighbors(object);
 		}
 		
-		
-		//    v
 		private function p2pdb():void
 		{
 			_databaseService = new DatabaseService(this);
-			_databaseService.connectToDatabase("CORE-COMMUNICATIONS-PUBLICDB");
-			_databaseService
-			
-			var gspec:GroupSpecifier = new GroupSpecifier("CORE-COMMUNICATIONS-PUBLICDB");
-			gspec.objectReplicationEnabled = true;
-			gspec.serverChannelEnabled = true;
-			gspec.multicastEnabled = true;
-			
-			this.addGroup("CORE-COMMUNICATIONS-PUBLICDB", gspec);
-			addEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
+			_databaseService.connectToDatabase(PUBLIC_KEY_DATABASE);
+			_databaseService.addEventListener(DatabaseServiceEvent.CONNECTED, handleDatabaseConnection);
 		}
-		//   ^ 
 		
-		
-		private function handleMysqlConnection(e:Event):void 
+		private function handleDatabaseConnection(e:DatabaseServiceEvent):void 
 		{
-			trace("COMMUNICATIONS: Connected.");
-			mysqlConnection.removeEventListener(Event.CONNECT, handleMysqlConnection);
+			trace("COMMUNICATIONS: Connected to p2p db.");
+			_databaseService.removeEventListener(DatabaseServiceEvent.CONNECTED);
+			
+			//TODO: Remove some sort of sql schedule that removes create if not exists functions
+			var statement:SQLStatement = new SQLStatement();
+			
+			var sql:String = "CREATE TABLE IF NOT EXISTS users (" +  
+			"    name TEXT, " +  
+			"    nearid TEXT, " +  
+			"    publickey BLOB" +  
+			");"; 
+			statement.text = sql;
+			
+			var initResult = _databaseService.writeToDB(PUBLIC_KEY_DATABASE, statement);
+			if (initResult is SQLResult)
+			{
+				("Successfully created table if it didn't exist");
+			}
+			else if (initResult is SQLError)
+			{
+				trace("Some kind of horrible, horrible error.");
+				dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, initResult));
+				return;
+			}
 			
 			var f:File = new File();
 			f = File.applicationStorageDirectory.resolvePath(".s3key");
+			
 			var fs:FileStream = new FileStream();
-			var st:Statement = mysqlConnection.createStatement();
+			var st:SQLStatement = new SQLStatement();
 			trace("COMMUNICATIONS: Checking key.");
 			if (f.exists) //Update
 			{
@@ -329,10 +337,10 @@ package sfxworks
 				fs.readBytes(_publicKey, 0, 24); //Read public key into identity
 				fs.close();
 				
-				st.sql = "UPDATE users "
-				+ "SET `nearid`='"+_netConnection.nearID+"' "
-				+ "WHERE `key`=?;";
-				st.setBinary(1, _privateKey);
+				st.text = "UPDATE users "
+				+ "SET nearid="+_netConnection.nearID+" "
+				+ "WHERE key=@publicKey;";
+				st.parameters["@publicKey"] = _publicKey;
 			}
 			else //Register
 			{
@@ -346,17 +354,25 @@ package sfxworks
 				fs.writeBytes(_publicKey);
 				fs.close();
 				
-				st.sql = "INSERT INTO users (`name`, `nearid`, `key`, `publickey`)"
-					+ " VALUES ('"+File.userDirectory.name+"','"+_netConnection.nearID+"',?,?);";
-				st.setBinary(1, _privateKey);
-				st.setBinary(2, _publicKey);
+				st.sql = "INSERT INTO users (name, nearid, publickey)"
+					+ " VALUES ('"+File.userDirectory.name+"','"+_netConnection.nearID+"',@publicKey);";
+				st.parameters["@publicKey"] = _publicKey;
 			}
 			
 			trace("COMMUNICATIONS: Sending query to server..");
-			var t:MySqlToken = st.executeQuery();
-			t.addResponder(new AsyncResponder(mysqlNearIDUpdateSuccess, mysqlNearIDUpdateError, t));
 			
-			timerRefresh = new Timer(40000);
+			var result = _databaseService.writeToDB(PUBLIC_KEY_DATABASE, st);
+			if (result is SQLResult)
+			{
+				dispatchEvent(new NetworkEvent(NetworkEvent.CONNECTED, _netConnection.nearID));
+			}
+			else if (result is SQLError)
+			{
+				dispatchEvent(new NetworkEvent(NetworkEvent.ERROR, null));
+				trace("COMMUNICATIONS: Update error." + result);
+			}
+			
+			timerRefresh = new Timer(20000);
 			timerRefresh.addEventListener(TimerEvent.TIMER, networkTimerRefresh);
 			timerRefresh.start();
 		}
@@ -398,17 +414,6 @@ package sfxworks
 			}
 		}
 		
-		private function mysqlNearIDUpdateError(info:Object, token:MySqlToken):void 
-		{
-			dispatchEvent(new NetworkEvent(NetworkEvent.ERROR, null));
-			trace("COMMUNICATIONS: Update error.");
-		}
-		
-		private function mysqlNearIDUpdateSuccess(data:Object, token:MySqlToken):void 
-		{
-			trace("COMMUNICATIONS: Update success.");
-			dispatchEvent(new NetworkEvent(NetworkEvent.CONNECTED, _netConnection.nearID));
-		}
 		
 		public function get privateKey():ByteArray 
 		{
@@ -449,28 +454,27 @@ package sfxworks
 		public function nameChange(name:String):void
 		{
 			nameChangeRequest = name;
-			var st:Statement = mysqlConnection.createStatement();
-			st.sql = "UPDATE users "
-				+ "SET `name`='"+name+"' "
-				+ "WHERE `key`=?;";
-			st.setBinary(1, _privateKey);
+			var st:SQLStatement = new SQLStatement();
+			st.text = "UPDATE users "
+				+ "SET name='"+name+"' "
+				+ "WHERE publickey=@publickey;";
+			st.parameters["@publickey"] = _publicKey;
 			
-			var t:MySqlToken = st.executeQuery();
-			t.addResponder(new AsyncResponder(nameChangeResponderSuccess, nameChangeResponderError, t));
 			trace("COMMUNICATIONS: Name change triggered.");
-		}
-		
-		private function nameChangeResponderSuccess(data:Object, token:MySqlToken):void
-		{
-			trace("COMMUNICATIONS: Name change response success..");
-			_name = nameChangeRequest;
-			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.SUCCESS, data));
-		}
-		
-		private function nameChangeResponderError(info:Object, token:MySqlToken):void
-		{
-			trace("COMMUNICATIONS: Name change response error:" + info);
-			dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, info));
+			var result = _databaseService.writeToDB(PUBLIC_KEY_DATABASE, st);
+			
+			
+			if (result is SQLResult)
+			{
+				trace("COMMUNICATIONS: Name change response success..");
+				_name = nameChangeRequest;
+				dispatchEvent(new NetworkActionEvent(NetworkActionEvent.SUCCESS, result));
+			}
+			else if (result is SQLError)
+			{
+				trace("COMMUNICATIONS: Name change response error:" + result);
+				dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, result));
+			}
 		}
 		
 		
