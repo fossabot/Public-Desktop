@@ -10,11 +10,12 @@ package sfxworks.services.events
 	public class DatabaseServiceEvent extends Event 
 	{
 		public static const RESULT_DATA:String = "dbserviceResultData";
+		public static const CONNECTED:String = "dbserviceConnected";
 		
 		private var _dbName:String;
 		private var _result:SQLResult;
 		
-		public function DatabaseServiceEvent(type:String, dbName:String, result:SQLResult, bubbles:Boolean=false, cancelable:Boolean=false) 
+		public function DatabaseServiceEvent(type:String, dbName:String, result:SQLResult=null, bubbles:Boolean=false, cancelable:Boolean=false) 
 		{ 
 			_result = result;
 			_dbName = dbName;

@@ -10,10 +10,11 @@
 	{
 		private var _info:Object;
 		
-		public static const SUCCESS:String = "success";
-		public static const FAILED:String = "failed";
-		public static const ERROR:String = "error";
-		public static const REFRESH:String = "refresh";
+		public static const SUCCESS:String = "nasuccess";
+		public static const FAILED:String = "nafailed";
+		public static const ERROR:String = "naerror";
+		public static const REFRESH:String = "narefresh";
+		public static const MESSAGE:String = "namessage";
 		
 		public function NetworkActionEvent(type:String, info:Object, bubbles:Boolean=false, cancelable:Boolean=false) 
 		{ 

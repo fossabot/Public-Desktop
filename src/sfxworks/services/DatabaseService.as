@@ -1,226 +1,401 @@
 package sfxworks.services 
 {
-	import by.blooddy.crypto.MD5;
 	import flash.data.SQLConnection;
 	import flash.data.SQLMode;
 	import flash.data.SQLResult;
 	import flash.data.SQLStatement;
 	import flash.events.EventDispatcher;
-	import flash.events.SQLErrorEvent;
+	import flash.events.IEventDispatcher;
 	import flash.events.SQLEvent;
+	import flash.events.TimerEvent;
 	import flash.filesystem.File;
-	import flash.filesystem.FileMode;
-	import flash.filesystem.FileStream;
 	import flash.net.GroupSpecifier;
-	import flash.net.NetStream;
+	import flash.net.registerClassAlias;
 	import flash.utils.ByteArray;
+	import flash.utils.Timer;
+	import sfxworks.CommunicationLine;
 	import sfxworks.Communications;
+	import sfxworks.Database;
 	import sfxworks.NetworkActionEvent;
 	import sfxworks.NetworkGroupEvent;
 	import sfxworks.services.events.DatabaseServiceEvent;
-	import sfxworks.services.nodes.DatabaseServiceNodeClient;
+	
 	/**
 	 * ...
-	 * @author Samuel Jacob Walker
+	 * @author Samuel Walker
 	 */
-	public class DatabaseService extends EventDispatcher
+	public class DatabaseService extends EventDispatcher //Needs to be its own thread
 	{
-		public static const SERVICE_NAME:String = "DATABASE_SERVICE";
-		public static const DATABASE_DIRECTORY:File = File.applicationStorageDirectory.resolvePath("database" + File.separator);
+		public static const SERVICE_NAME:String = DatabaseService();
+		public static const DATABASE_DIRECTORY:File = File.applicationStorageDirectory.resolvePath("db" + File.separator);
+		private var c:Communications;
+		private var databases:Vector.<Database>;
 		
-		private var communications:Communications;
-		
-		private var databaseName:Vector.<String>;
-		private var gspecs:Vector.<GroupSpecifier>;
-		private var netstreamI:Vector.<NetStream>;
-		private var netstreamO:Vector.<NetStream>;
-		private var sqlConnection:Vector.<SQLConnection>;
-		private var active:Vector.<Boolean>;
-		
-		//SQL FORMAT: //db [object number, md5, object (serialized), date]
-		
-		public function DatabaseService(c:Communications) 
+		public function DatabaseService(communications:Communications, target:flash.events.IEventDispatcher=null) 
 		{
-			communications = c;
+			super(target);
+			trace("DATABASE_SERVICE init");
+			c = communications;
+			c.addEventListener(NetworkGroupEvent.OBJECT_RECIEVED, handleGroupObjectRecieved);
+			c.addEventListener(NetworkGroupEvent.OBJECT_REQUEST, handleObjectRequest);
+			databases = new Vector.<Database>();
 			
-			active = new Vector.<Boolean>();
-			databaseName = new Vector.<String>();
-			gspecs = new Vector.<GroupSpecifier>();
-			netstreamI = new Vector.<NetStream>();
-			netstreamO = new Vector.<NetStream>();
-			sqlConnection = new Vector.<SQLConnection>();
-			
-			communications.addEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleSuccessfulGroupConnection);
-			communications.addEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulNetworkAction);
-			communications.addEventListener(NetworkGroupEvent.OBJECT_RECIEVED, handleObjectRecieved);
-			communications.addEventListener(NetworkGroupEvent.OBJECT_REQUEST, handleObjectRequest);
+			registerClassAlias("flash.data.SqlStatement", SQLStatement);
+			registerClassAlias("flash.events.EventDispatcher", EventDispatcher);
+			registerClassAlias("flash.utils.ByteArray;", ByteArray);
 		}
 		
+		//Row from record OBJECT REQUEST
+		private function handleObjectRequest(e:NetworkGroupEvent):void 
+		{
+			if (e.groupName.indexOf(SERVICE_NAME) > -1) //If it's for this service
+			{
+				//Find database reference
+				trace("DATABASE_SERVICE object request #" + e.groupObjectNumber);
+				for each (var db:Database in databases)
+				{
+					if (e.groupName.indexOf(db.name) > -1)
+					{
+						//Access record connection.
+						//Get the requseted record.
+						
+						var st:SQLStatement = new SQLStatement();
+						st.text = "SELECT sql FROM steps WHERE step = " + e.groupObjectNumber + ";";
+						st.execute();
+						var result:SQLResult = st.getResult();
+						var row = result.data[0];
+						
+						c.satisfyObjectRequest(e.groupName, e.groupObjectNumber, row.sql);
+						trace("DATABASE_SERVICE Satisfying object reqyest with " + row.sql);
+					}
+					return;
+				}
+			}
+		}
 		
-		public function connectToDatabase(name:String, type:String, encryptionKey:ByteArray=null) //TODO: TWO types. Syncronous (all databases are the stame) vs Mass (attemps to use as much space as possible with as much avalibility as possible prioritizing storage on highly active users and replicating on others)
-		{	
-			//1: Establish group connection
-			var gspec:GroupSpecifier = new GroupSpecifier(name);
+		//Row from record OBJECT RECIEVED
+		private function handleGroupObjectRecieved(e:NetworkGroupEvent):void 
+		{
+			if (e.groupName.indexOf(SERVICE_NAME) > -1) //If it's for this service
+			{
+				trace("DATABASE_SERVICE Row #" + e.groupObjectNumber + " recieved for database " + e.groupName + ".");
+				if (e.groupObjectNumber == 0) //It's the max number of entries for the record database
+				{
+					//Find the right database
+					for each (var db:Database in databases)
+					{
+						if (e.groupName.search(db.name) > -1)
+						{
+							trace("DATABASE_SERVICE Max row #" + e.groupObject + ". Current row #" + db.step);
+							
+							//If it doesn't have all the result data, get it
+							if (e.groupObject as Number != db.step)
+							{
+								//Request all objects up to that point.
+								c.addWantObject(e.groupName, db.step, e.groupObject);
+								trace("DATABASE_SERVICE requesting row #" db.step + " through row # " + e.groupObject " for db: " + db.name + ".");
+								db.stepsToLoad = e.groupObject;
+							}
+							else
+							{
+								trace("DATABASE_SERVICE " + db.name + " is conneted.");
+								//db is ready
+								dispatchEvent(new DatabaseServiceEvent(DatabaseServiceEvent.CONNECTED, db.name));
+								//Add have objects for peers
+								c.addHaveObject(e.groupName, 1, e.groupObject as Number);
+							}
+							
+							return;
+						}
+					}
+				}
+				else //It has retrieved a row
+				{
+					//Find the right database
+					for each (var db:Database in databases)
+					{
+						if (db.name == e.groupName)
+						{
+							trace("DATABASE_SERVICE retrieved row step #" + e.groupObjectNumber + ".");
+							
+							//Write the statement in the record database
+							db.loadedSteps++;
+							var st:SQLStatement = new SQLStatement();
+							//Step | Sql | date
+							st.text = "INSERT INTO steps (step, sql, date) VALUES (" + e.groupObjectNumber + ", @sqlStatement, @date);";
+							st.parameters["@sqlStatement"] = e.groupObject;
+							st.parameters["@date"] = new Date();
+							st.sqlConnection = db.recordConnection;
+							st.execute();
+							
+							trace("DATABASE_SERVICE submitted row to record log.");
+							
+							//Check to see if it has all the records.
+							if (db.loadedSteps == db.stepsToLoad)
+							{
+								//Take all the statements from the records and apply them to the database
+								trace("DATABASE_SERVICE gathering sql statements from record log");
+								
+								var state:SQLStatement = new SQLStatement();
+								state.text = "SELECT sql FROM steps;";
+								state.sqlConnection = db.recordConnection;
+								state.execute();
+								//Syncronous. ^Got all sql statements. v Submits them to primary database
+								var result:SQLResult = state.getResult();
+								var numResults = result.data.length;
+								trace("DATABASE_SERVICE executing " + numResults - db.step " new sql statements on the local database: " + db.name + ".");
+								for (i = db.step; i < numResults; i++)
+								{ 
+									var row = result.data[i]; 
+									var sqlStatement:SQLStatement = row.sql as SQLStatement;
+									sqlStatement.sqlConnection = db.localConnection;
+									sqlStatement.execute();
+								}
+								db.step = db.loadedSteps;
+								
+								trace("DATABASE_SERVICE " + db.name + " is conneted.");
+								dispatchEvent(new DatabaseServiceEvent(DatabaseServiceEvent.CONNECTED, db.name));
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		public function connectToDatabase(name:String, encryptionKey:ByteArray=null):void
+		{
+			trace("DATABASE_SERVICE conneting to " + db.name + ".");
+			
+			var gspec:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + name);
+			gspec.multicastEnabled = true;
+			gspec.serverChannelEnabled = true;
+			gspec.objectReplicationEnabled = true;
+			var communicationLine:CommunicationLine = new CommunicationLine(c, SERVICE_NAME + name, gspec);
+			communicationLine.addEventListener(NetworkActionEvent.SUCCESS, handleCommunicationLineSuccess);
+			communicationLine.addEventListener(NetworkActionEvent.MESSAGE, handleMessage);
+			communicationLines.push(communicationLine);
+			
+			var sqlConnection:SQLConnection = new SQLConnection();
+			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name), SQLMode.CREATE, null, false, 1024, encryptionKey);
+			
+			var recordSqlConnection:SQLConnection = new SQLConnection();
+			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record"), SQLMode.CREATE, null, false, 1024, encryptionKey);
+			
+			var statement:SQLStatement = new SQLStatement();
+			var sql:String = "CREATE TABLE IF NOT EXISTS steps (" +  
+			"    step INTEGER, " +  
+			"    sql Object, " +  
+			"    date Date" +  
+			");"; 
+			statement.sqlConnection = recordSqlConnection;
+			statement.text = sql;
+			statement.execute(); //TODO: Error handling
+			
+			var dbInfoFile:File = new File(DATABASE_DIRECTORY.nativePath + name + ".info");
+			
+			var database:Database = new Database();
+			database.communicationLine = communicationLine;
+			database.dbInfoFile = dbInfoFile;
+			database.loadedSteps = 0;
+			database.localConnection = sqlConnection;
+			database.name = name;
+			database.recordConnection = recordSqlConnection;
+			
+			databases.push(db);
+		}
+		
+		private function handleCommunicationLineSuccess(e:NetworkActionEvent):void 
+		{
+			e.target.removeEventListener(NetworkActionEvent.SUCCESS, handleCommunicationLineSuccess);
+			
+			for each (var db:Database in databases)
+			{
+				if (db.name == e.info)
+				{
+					trace("DATABASE_SERVICE communication line for " + db.name + " established.");
+					//get max number of entries from result db
+					c.addWantObject(e.info, 0, 0);
+					//If no one responds in 10 seconds, assume that youre the only one online and take over.
+					//TODO: Make branch system for keeping of multible databases that may go offsync given 1 user isnt always online
+					
+					function handleDatabaseTimer(e:TimerEvent):void 
+					{
+						t.removeEventListener(TimerEvent.TIMER, handleDatabaseTimer);
+						if (db.loadedSteps == 0)
+						{
+							trace("DATABASE_SERVICE max gather function time-out.");
+							
+							//Assume that you're the only one online and take over
+							c.addHaveObject(SERVICE_NAME + db.name, 0, db.step);
+							db.loadedSteps = db.step;
+						}
+						
+						trace("DATABASE_SERVICE " + db.name + " is conneted.");
+						dispatchEvent(new DatabaseServiceEvent(DatabaseServiceEvent.CONNECTED, db.name));
+					}
+					var t:Timer = new Timer(10000);
+					t.addEventListener(TimerEvent.TIMER, handleDatabaseTimer);
+					t.start();
+				}
+			}
+		}
+		
+		public function createDatabase(name:String, encryptionKey:ByteArray = null):void
+		{
+			trace("DATABASE_SERVICE creating database " + db.name + ".");
+			
+			var gspec:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + name);
 			gspec.multicastEnabled = true;
 			gspec.serverChannelEnabled = true;
 			gspec.objectReplicationEnabled = true;
 			
-			communications.addGroup(SERVICE_NAME + name, gspec);
+			var communicationLine:CommunicationLine = new CommunicationLine(c, SERVICE_NAME + name, gspec);
+			communicationLine.addEventListener(NetworkActionEvent.MESSAGE, handleMessage);
 			
-			//2: Establish local connection
-			var dbFile:File = new File(DATABASE_DIRECTORY.nativePath + name + ".db");
-			var conn:SQLConnection = new SQLConnection();
-			//TODO: Handle error with improper encryption key
-			conn.openAsync(dbFile, SQLMode.CREATE, null, true, 1024, encryptionKey);
-			conn.addEventListener(SQLEvent.OPEN, handleNewLocalDatabase);
+			//Actual database
+			var sqlConnection:SQLConnection = new SQLConnection();
+			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name), SQLMode.CREATE, null, false, 1024, encryptionKey);
 			
-			sqlConnection.push(conn);
-			databaseName.push(name);
-			gspecs.push(gspec);
-			netstreamI.push(new NetStream());
-			netstreamO.push(new NetStream());
-		}
-		
-		private function handleNewLocalDatabase(e:SQLEvent):void 
-		{
-			e.target.removeEventListener(SQLEvent.OPEN, handleNewLocalDatabase);
+			//Record database
+			var recordSqlConnection:SQLConnection = new SQLConnection();
+			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record"), SQLMode.CREATE, null, false, 1024, encryptionKey);
+			
+			//Is really going to suck if there are huge image bytearrays and they change a few times
+			//Will take up a bit of space. Only way I can think of to keep everything in sync though.
+			//Setup record database -- |step <key>| sql <object>| 
+			//Or run based on date (and delete others. Decreasing number of overall steps. 
+			//Sql autorun scrips for later TODO: [maybe at a certain UTC]
 			
 			var statement:SQLStatement = new SQLStatement();
-			statement.sqlConnection = e.target;
-			
-			var sql:String = "CREATE TABLE IF NOT EXISTS Objects (" +  
-			"    objectNumber INTEGER PRIMARY KEY, " +  
-			"    md5 TEXT, " +  
-			"    object Object, " +  
+			var sql:String = "CREATE TABLE IF NOT EXISTS steps (" +  
+			"    step INTEGER, " +  
+			"    sql Object, " +  
 			"    date Date" +  
-			")"; 
-			
+			");"; 
+			statement.sqlConnection = recordSqlConnection;
 			statement.text = sql;
-			statement.execute();
+			statement.execute(); //TODO: Error handling
 			
-			statement.addEventListener(SQLEvent.RESULT, handleSuccessfulDatabaseSetup);
+			var dbInfoFile:File = new File(DATABASE_DIRECTORY.nativePath + name + ".info");
+			
+			var db:Database = new Database();
+			db.name = name;
+			db.dbInfoFile = dbInfoFile;
+			db.loadedSteps = 0;
+			db.communicationLine = communicationLine;
+			db.localConnection = sqlConnection;
+			db.recordConnection = recordSqlConnection;
+			db.step = 0;
+			
+			databases.push(db);
+			
+			trace("DATABASE_SERVICE " + db.name + " is conneted.");
+			dispatchEvent(new DatabaseServiceEvent(DatabaseServiceEvent.CONNECTED, db.name));
 		}
 		
-		private function handleSuccessfulTableCreation(e:SQLEvent):void 
+		private function handleMessage(e:NetworkActionEvent):void 
 		{
-			e.target.removeEventListener(SQLEvent.RESULT, handleSuccessfulDatabaseSetup);
-			
-			if (netstreamI[sqlConnection.indexOf(e.target)] != null)
+			//Find the database/
+			for each (var db:Database in databases)
 			{
-				(netstreamI[sqlConnection.indexOf(e.target)].client as DatabaseServiceNodeClient).active = true;
+				if (db.communicationLine == e.target)
+				{
+					trace("DATABASE_SERVICE new sql statement for " + db.name + ".");
+					
+					var st:SQLStatement = e.info as SQLStatement;
+					//Transfer connection hook
+					st.sqlConnection = db.localConnection;
+					st.execute();
+					//Log.
+					db.step++;
+					db.loadedSteps = db.step;
+					
+					trace("DATABASE_SERVICE logging statement #" + db.step + " for db:" + db.name + ".");
+					
+					var recordStatement:SQLStatement = new SQLStatement();
+					recordStatement.sqlConnection = db.recordConnection;
+					recordStatement.text "INSERT INTO steps (sql, date) VALUES (@sql, @date);";
+					recordStatement.parameters["@sql"] = st;
+					recordStatement.parameters["@date"] = new Date();
+					recordStatement.execute();
+					
+					//Add have object for peers
+					trace("DATABASE_SERVICE row to have list for db:" + db.name + ".");
+					c.addHaveObject(SERVICE_NAME + db.name, db.step, db.step);
+				}
 			}
-			active[sqlConnection.indexOf(e.target)] = true;
 		}
 		
-		private function handleSuccessfulGroupConnection(e:NetworkGroupEvent):void 
+		public function readFromDB(name:String, statement:SQLStatement):Object //Either result or error
 		{
-			if (e.groupName.search(SERVICE_NAME) > -1)
+			for each (var db:Database in databases)
 			{
-				//Listeners for publishing and responding to publishers
-				netstreamI[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))] = new NetStream(communications.netConnection, gspecs[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))]);
-				netstreamO[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))] = new NetStream(communications.netConnection, gspecs[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))]);
-				
-				//Get all possible objects [Objcets are split for faster initial retrieval of database]
-				communications.addWantObject(e.groupName.split(SERVICE_NAME.length), 0, Number.MAX_VALUE);
-			}
-		}
-		
-		private function handleSuccessfulNetworkAction(e:NetworkActionEvent):void 
-		{
-			if (netstreamI.indexOf(e.info) > -1)
-			{
-				netstreamI[netstreamI.indexOf(e.info)].play("stream");
-				netstreamI[netstreamI.indexOf(e.info)].client = new DatabaseServiceNodeClient(databaseName[netstreamI.indexOf(e.info)]);
-				
-				(netstreamI[netstreamI.indexOf(e.info)].client as DatabaseServiceNodeClient).active = active[netstreamI.indexOf(e.info)];
-			}
-			else if (netstreamO.indexOf(e.info) > -1)
-			{
-				netstreamO[netstreamO.indexOf(e.info)].publish("stream");
-				netstreamO[netstreamO.indexOf(e.info)].client = new DatabaseServiceNodeClient(databaseName[netstreamO.indexOf(e.info)]);
-			}
-		}
-		
-		//                        == Object Request ===
-		private function handleObjectRequest(e:NetworkGroupEvent):void 
-		{
-			var sqlStatement:SQLStatement = new SQLStatement();
-			sqlStatement.sqlConnection = sqlConnection[databaseName.indexOf(e.groupName.split(SERVICE_NAME.length))]
-			sqlStatement.text = "SELECT object, md5, date FROM object WHERE objectNumber = " + e.groupObjectNumber.toString() + ";";
-			sqlStatement.addEventListener(SQLEvent.RESULT, handleSqlResult);
-			sqlStatement.addEventListener(SQLErrorEvent.ERROR, handleSqlError);
-		}
-		
-		private function handleSqlError(e:SQLErrorEvent):void 
-		{
-			e.target.removeEventListener(SQLEvent.RESULT, handleSqlResult);
-			e.target.removeEventListener(SQLErrorEvent.ERROR, handleSqlError);
-			
-			trace(e.errorID + ":" + e.error);
-			dispatchEvent(e);
-			//TODO: Test whether or not the database will throw an error if it can't find the record
-		}
-		
-		private function handleSqlResult(e:SQLEvent):void 
-		{
-			e.target.removeEventListener(SQLEvent.RESULT, handleSqlResult);
-			e.target.removeEventListener(SQLErrorEvent.ERROR, handleSqlError);
-			
-			var result:SQLResult = e.target.getResult(); 
-			var row:Object = result.data[0];
-			communications.satisfyObjectRequest(SERVICE_NAME + databaseName[sqlConnection.indexOf(e.target.sqlConnection)], row.objectNumber, row.object);
-		}
-		
-		//Is regiserClassAlies Global?
-		//                      == Object Recieved == [Initial object retrieval (for downloading of database)]
-		private function handleObjectRecieved(e:NetworkGroupEvent):void 
-		{
-			//db [object number, md5, object]
-			
-			var statement:SQLStatement = new SQLStatement();
-			statement.sqlConnection = sqlConnection[databaseName.indexOf(e.groupName.substr(SERVICE_NAME.length))];
-			statement.text = "insert or replace into Objects (objectNumber, md5, object, date) values"
-				+ "((select objectNumber from Objects where objectNumber = " + e.groupObjectNumber.toString() + "), '" + MD5.hashBytes(e.groupObject as ByteArray) + "', @object, @date);";
-			statement.parameters["@object"] = e.groupObject;
-			statement.parameters["@date"] = new Date();
-			
-			statement.execute();
-		}
-		
-		
-		//Submittion of data
-		public function submitData(dbName:String, sqlStatement:SQLStatement):void
-		{
-			//Connection should be null.
-			
-			//Send to network (All the databases in the network group)
-			netstreamI[databaseName.indexOf(dbName)].send("query", sqlStatement);
-			//Update local
-			sqlStatement.sqlConnection = sqlConnection[databaseName.indexOf(dbName)];
-			sqlStatement.addEventListener(SQLErrorEvent.ERROR, handleSqlError);
-			sqlStatement.execute();
-		}
-		
-		public function queryLocalDB(dbName:String, sqlStatement:SQLStatement):void
-		{
-			function handleLocalDBResult(e:SQLEvent):void //function inside function to get proper dbname because asyncronous and unpredictability of which db was called in what order and which one would finish first
-			{
-				sqlStatement.removeEventListener(SQLEvent.RESULT, handleLocalDBResult);
-				sqlStatement.removeEventListener(SQLErrorEvent.ERROR, handleSqlError);
-				//Attach result to dse with database name
-				dispatchEvent(new DatabaseServiceEvent(DatabaseServiceEvent.RESULT_DATA, dbName, e.target.getResult()));
+				if (db.name == name)
+				{
+					trace("DATABASE_SERVICE executing statement " + statement.text + " on db:" + db.name + ".");
+					statement.sqlConnection = db.localConnection;
+					try
+					{
+						statement.execute();
+						var result = statement.getResult();
+						trace("DATABASE_SERVICE success:" + result);
+						return result;
+					}
+					catch (error)
+					{
+						trace("DATABASE_SERVICE error:" + error);
+						return error;
+					}
+				}
 			}
 			
-			sqlStatement.sqlConnection = sqlConnection[databaseName.indexOf(dbName)];
-			sqlStatement.addEventListener(SQLEvent.RESULT, handleLocalDBResult);
-			sqlStatement.addEventListener(SQLErrorEvent.ERROR, handleSqlError);
-			sqlStatement.execute();
-			
+			return -1;
 		}
 		
-		
-		
-		
+		public function writeToDB(name:String, statement:SQLStatement):Object
+		{
+			for each (var db:Database in databases)
+			{
+				if (db.name == name)
+				{
+					statement.sqlConnection = db.localConnection;
+					trace("DATABASE_SERVICE executing statement " + statement.text + " on db:" + db.name + ".");
+					try
+					{
+						statement.execute();
+					}
+					catch (error)
+					{
+						return error;
+					}
+					//Send statement
+					db.communicationLine.send(statement);
+					//Log statement
+					db.step++;
+					db.loadedSteps = db.step;
+					
+					trace("DATABASE_SERVICE logging statement #" + db.step + " for db:" + db.name + ".");
+					
+					var recordStatement:SQLStatement = new SQLStatement();
+					recordStatement.sqlConnection = db.recordConnection;
+					recordStatement.text "INSERT INTO steps (sql, date) VALUES (@sql, @date);"; //possible todo: (md5 for statments and compare dates globally for better synchronization)
+					recordStatement.parameters["@sql"] = statement;
+					recordStatement.parameters["@date"] = new Date();
+					recordStatement.execute();
+					
+					var result = statement.getResult();
+					trace("DATABASE_SERVICE success:" + result);
+					
+					//Add have object for peers
+					trace("DATABASE_SERVICE row to have list for db:" + db.name + ".");
+					c.addHaveObject(SERVICE_NAME + db.name, db.step, db.step);
+					
+					return result;
+				}
+			}
+			
+			return -1;
+		}
 	}
 
 }
