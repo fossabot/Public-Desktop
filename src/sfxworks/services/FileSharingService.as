@@ -1,10 +1,9 @@
-package sfxworks.services 
+﻿package sfxworks.services 
 {
 	import by.blooddy.crypto.MD5; //Awesome guy
-	import com.maclema.mysql.Connection;
-	import com.maclema.mysql.MySqlToken;
-	import com.maclema.mysql.ResultSet;
-	import com.maclema.mysql.Statement;
+	import flash.data.SQLResult;
+	import flash.data.SQLStatement;
+	import flash.errors.SQLError;
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
 	import flash.filesystem.File;
@@ -15,7 +14,7 @@ package sfxworks.services
 	import sfxworks.Communications;
 	import sfxworks.NetworkGroupEvent;
 	import flash.errors.IOError;
-	import mx.rpc.AsyncResponder;
+	import sfxworks.services.events.DatabaseServiceEvent;
 	import sfxworks.services.events.FileSharingEvent;
 	/**
 	 * ...
@@ -25,7 +24,6 @@ package sfxworks.services
 	{
 		//Fetch public file listing from mysqldb
 		private var c:Communications;
-		private var mysqlConnection:Connection;
 		private var fileSharingInfo:File;
 		
 		private var _filePaths:Vector.<String>;
@@ -66,7 +64,7 @@ package sfxworks.services
 			   
 		
 		//Tmp for browse for save
-		private var resultSets:Vector.<ResultSet>;
+		private var resultSets:Vector.<SQLResult>;
 		private var saveLocations:Vector.<File>;
 		
 		
@@ -76,10 +74,8 @@ package sfxworks.services
 		public function FileSharingService(communications:Communications) 
 		{
 			c = communications;
-			
-			mysqlConnection = new Connection("-.sfxworks.net", 9001, "-", "-", "-");
-			mysqlConnection.connect();
-			mysqlConnection.addEventListener(Event.CONNECT, handleMysqlConnection);
+			c.databaseService.connectToDatabase(SERVICE_NAME);
+			c.databaseService.addEventListener(DatabaseServiceEvent.CONNECTED, handleDatabaseConnection);
 			
 			fileSharingInfo = File.applicationStorageDirectory.resolvePath("services" + File.separator + "filesharingservice" + File.separator + "infoE");
 			
@@ -92,41 +88,56 @@ package sfxworks.services
 			numberOfConnectedGroups = new Number(0);
 		}
 		
-		private function handleMysqlConnection(e:Event):void 
+		private function handleDatabaseConnection(e:DatabaseServiceEvent):void 
 		{
 			//Mysql format: id(autogen) | FileName.ext | Start Index | EndIndex |  groupID | md5
 			//18446744073709551615 per table :D
-			mysqlConnection.removeEventListener(Event.CONNECT, handleMysqlConnection);
-			trace("File sharing service connected to central database..");
+			c.databaseService.removeEventListener(DatabaseServiceEvent.CONNECTED, handleDatabaseConnection);
+			trace("File sharing service connected to peer database.");
+			var check:SQLStatement = new SQLStatement();
+			
+			var sql:String = "CREATE TABLE IF NOT EXISTS files (" +  
+				"    id PRIMARY KEY, " +  
+				"    filename TEXT, " +  
+				"    startindex NUMBER," +
+				"    endindex NUMBER," +
+				"    groupID NUMBER," +
+				"    md5 TEXT" +
+				");"; 
+			check.text = sql;
+			
+			var checkResult = c.databaseService.writeToDB(SERVICE_NAME, check);
+			if (checkResult is SQLError)
+			{
+				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, checkResult));
+				return;
+			}
+			
 			//Get the last row in the table
-			var st:Statement = mysqlConnection.createStatement();
-			st.sql = "SELECT * FROM files "
+			var st:SQLStatement = new SQLStatement();
+			st.text = "SELECT * FROM files "
 				+ "ORDER BY `id` DESC "
 				+ "LIMIT 1;";
-			var t:MySqlToken = st.executeQuery();
-			t.addResponder(new AsyncResponder(getLastRowInitSuccess, getLastRowInitError, t));
-		}
-		
-		private function getLastRowInitError(info:Object, token:MySqlToken):void
-		{
-			trace("Last row get error: " + info);
-			dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR));
-		}
-		
-		private function getLastRowInitSuccess(data:Object, token:MySqlToken):void 
-		{
-			var rs:ResultSet = new ResultSet(token);
-			if (rs.next())
+			
+			var fetchResult = c.databaseService.readFromDB(SERVICE_NAME, st);
+			if (fetchResult is SQLError)
 			{
-				numberOfGroups = parseFloat(rs.getString("groupID")); //The last row, in the groupID column will have the number of groups.
+				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, checkResult));
+				return;
+			}
+			//t.addResponder(new AsyncResponder(getLastRowInitSuccess, getLastRowInitError, t));
+			if ((fetchResult as SQLResult).data == null)
+			{
+				numberOfGroups = 0;
 			}
 			else
 			{
-				numberOfGroups = 0;
+				numberOfGroups = (fetchResult as SQLResult).data[0].groupID;
 			}
 			
 			trace("Response successful.");
 			trace("Number of groups = " + numberOfGroups);
+			
 			for (var i:Number = 0; i < numberOfGroups+1; i++)
 			{
 				var gs:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + i.toString());
@@ -139,6 +150,7 @@ package sfxworks.services
 				c.addEventListener(NetworkGroupEvent.CONNECTION_SUCCESSFUL, handleGroupConnectionSuccessful);
 				c.addEventListener(NetworkGroupEvent.CONNECTION_FAILED, handleGroupConnectionFailed);
 			}
+			
 		}
 		
 		private function handleGroupConnectionFailed(e:NetworkGroupEvent):void 
@@ -255,119 +267,107 @@ package sfxworks.services
 			}
 			
 			//Get the last row in the table
-			var st:Statement = mysqlConnection.createStatement();
-			st.sql = "SELECT * FROM files "
+			
+			var st:SQLStatement = new SQLStatement();
+			st.text = "SELECT * FROM files "
 				+ "ORDER BY `id` DESC "
 				+ "LIMIT 1;";
-			var t:MySqlToken = st.executeQuery();
-			t.addResponder(new AsyncResponder(getLastRowAddFileSuccess, mysqlNearIDUpdateError, t));
+			var result = c.databaseService.readFromDB(SERVICE_NAME, st);
 			
-			//It's inside a function so I can handle a ton of addFile() methods at once since it's asyncronous 
-			function getLastRowAddFileSuccess(data:Object, token:MySqlToken):void
+			if (result is SQLError)
 			{
-				var fs:FileStream = new FileStream();
-				var rs:ResultSet = new ResultSet(token);
-				
-				var lastEndIndex:Number;
-				if (rs.next())
+				trace("MYSQL ERROR: " + result);
+				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, result, file.name));
+				return;
+			}
+			
+			if ((result as SQLResult).data[0] == null)
+			{
+				lastEndIndex = 0;
+			}
+			else
+			{
+				var lastEndIndex:Number = (result as SQLResult).data[0].groupID;
+			}
+			
+			
+			var numberOfSplits:Number = Math.ceil(file.size / SPLIT_SIZE);
+			
+			if (lastEndIndex + numberOfSplits > 9007199254740992)
+			{
+				//A new group must be made. Tell all clients.
+				numberOfGroups ++;
+			}
+			var startIndex:Number = lastEndIndex + 1;
+			var endIndex:Number = startIndex + numberOfSplits;
+			
+			//write to sql --- 
+			
+			//generate md5s
+			var md5s:String = new String()
+			var fileData:ByteArray = new ByteArray();
+			fs.open(file, FileMode.READ);
+				for (var i:Number = 0; i < numberOfSplits; i++)
 				{
-					lastEndIndex = parseFloat(rs.getString("groupID"));
-				}
-				else
-				{
-					lastEndIndex = 0;
-				}
-				
-				var numberOfSplits:Number = Math.ceil(file.size / SPLIT_SIZE);
-				
-				if (lastEndIndex + numberOfSplits > 9007199254740992)
-				{
-					//A new group must be made. Tell all clients.
-					numberOfGroups ++;
-				}
-				var startIndex:Number = lastEndIndex + 1;
-				var endIndex:Number = startIndex + numberOfSplits;
-				
-				//write to sql --- 
-				
-				//generate md5s
-				var md5s:String = new String()
-				var fileData:ByteArray = new ByteArray();
-				fs.open(file, FileMode.READ);
-					for (var i:Number = 0; i < numberOfSplits; i++)
+					var tmp:ByteArray = new ByteArray();
+					
+					var toRead:Number = SPLIT_SIZE;
+					if (fs.bytesAvailable < SPLIT_SIZE)
 					{
-						var tmp:ByteArray = new ByteArray();
-						
-						var toRead:Number = SPLIT_SIZE;
-						if (fs.bytesAvailable < SPLIT_SIZE)
-						{
-							toRead = fs.bytesAvailable;
-						}
-						
-						fs.readBytes(tmp, 0, toRead);
-						var newMd5:String = MD5.hashBytes(tmp);
-						md5s = md5s + newMd5;
-						trace("MD5 HASH:" + newMd5 + " for file sector " + i.toString());
+						toRead = fs.bytesAvailable;
 					}
+					
+					fs.readBytes(tmp, 0, toRead);
+					var newMd5:String = MD5.hashBytes(tmp);
+					md5s = md5s + newMd5;
+					trace("MD5 HASH:" + newMd5 + " for file sector " + i.toString());
+				}
+			fs.close();
+			
+			//Mysql format: id(autogen) | FileName.ext | Start Index | EndIndex |  groupID | md5
+			var submitSt:SQLStatement = new SQLStatement();
+			submitSt.text = "INSERT INTO files (`filename`, `startindex`, `endindex`, `groupid`, `md5`)"
+				+ " VALUES ('" + file.name + "'," + startIndex.toString() + "," + endIndex.toString() + "," + numberOfGroups.toString() + ",'" + md5s + "');";
+				
+			trace("Submitting file to p2p database..");
+			var submitResult = c.databaseService.writeToDB(SERVICE_NAME, submitSt);
+			
+			if (submitResult is SQLError)
+			{
+				trace("Final submit failure. Mysql Error: " + submitResult);
+				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, "Failed to added file " + file.name + ". Couldn't submit to database..."));
+				return;
+			}
+			
+			trace("Writing to group..");
+			//write to group
+			c.addHaveObject(SERVICE_NAME + numberOfGroups.toString(), startIndex, endIndex);
+			
+			//write to index
+			trace("Writing to index..");
+			for (var i:Number = startIndex; i < endIndex; i++)
+			{
+				_filePaths.push(file.nativePath);
+				_fileIDs.push(i);
+				_groupIDs.push(numberOfGroups);
+				_fileStartIndex.push(startIndex);
+				_fileEndIndex.push(endIndex);
+			}
+			
+			trace("Writing to filesharing info..");
+			//write to filesharinginfo
+			var fs:FileStream = new FileStream();
+			
+			fs.open(fileSharingInfo, FileMode.WRITE);
+				fs.writeFloat(new Number(_filePaths.length)) //Write number of files to first float
 				fs.close();
-				
-				//Mysql format: id(autogen) | FileName.ext | Start Index | EndIndex |  groupID | md5
-				var submitSt:Statement = mysqlConnection.createStatement();
-				submitSt.sql = "INSERT INTO files (`filename`, `startindex`, `endindex`, `groupid`, `md5`)"
-					+ " VALUES ('" + file.name + "'," + startIndex.toString() + "," + endIndex.toString() + "," + numberOfGroups.toString() + ",'" + md5s + "');";
-					
-				trace("Submitting file to central database..");
-				var submitToken:MySqlToken = submitSt.executeQuery();
-				submitToken.addResponder(new AsyncResponder(submitSuccess, submitFailure, submitToken));
-				
-				//Yo dawg I heard you like functions
-				function submitSuccess(data:Object, token:MySqlToken):void
-				{
-					trace("Writing to group..");
-					//write to group
-					c.addHaveObject(SERVICE_NAME + numberOfGroups.toString(), startIndex, endIndex);
-					
-					//write to index
-					trace("Writing to index..");
-					for (var i:Number = startIndex; i < endIndex; i++)
-					{
-						_filePaths.push(file.nativePath);
-						_fileIDs.push(i);
-						_groupIDs.push(numberOfGroups);
-						_fileStartIndex.push(startIndex);
-						_fileEndIndex.push(endIndex);
-					}
-					
-					trace("Writing to filesharing info..");
-					//write to filesharinginfo
-					var fs:FileStream = new FileStream();
-					
-					fs.open(fileSharingInfo, FileMode.WRITE);
-						fs.writeFloat(new Number(_filePaths.length)) //Write number of files to first float
-						fs.close();
-					fs.open(fileSharingInfo, FileMode.APPEND);
-						fs.writeUTF(file.nativePath);
-						fs.writeFloat(numberOfGroups);
-						fs.writeFloat(lastEndIndex + 1);
-						fs.close();
-					
-					dispatchEvent(new FileSharingEvent(FileSharingEvent.FILE_ADDED, "Successfully added file " + file.name, file.nativePath, startIndex, endIndex
-					, numberOfGroups));
-				}
-				
-				function submitFailure(data:Object, token:MySqlToken):void
-				{
-					trace("Final submit failure. Mysql Error: " + data);
-					dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, "Failed to added file " + file.name + ". Couldn't submit to database..."));
-					return; 
-				}
-			}
+			fs.open(fileSharingInfo, FileMode.APPEND);
+				fs.writeUTF(file.nativePath);
+				fs.writeFloat(numberOfGroups);
+				fs.writeFloat(lastEndIndex + 1);
+				fs.close();
 			
-			function mysqlNearIDUpdateError(info:Object, token:MySqlToken):void
-			{
-				trace("MYSQL ERROR: " + info);
-				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, "Failed to contact database for file submission.", file.name));
-			}
+			dispatchEvent(new FileSharingEvent(FileSharingEvent.FILE_ADDED, "Successfully added file " + file.name, file.nativePath, startIndex, endIndex, numberOfGroups));
 		}
 		
 		
@@ -375,34 +375,30 @@ package sfxworks.services
 		{
 			var file:File = new File();
 			
-			var statement:Statement = mysqlConnection.createStatement();
-			statement.sql = "SELECT * from `files` WHERE `publickey`=" + groupNumber.toString() + " AND `startindex`=" + startIndex.toString() + ";";
-			var token:MySqlToken = statement.executeQuery();
+			var statement:SQLStatement = new SQLStatement();
+			statement.text = "SELECT * from `files` WHERE `publickey`=" + groupNumber.toString() + " AND `startindex`=" + startIndex.toString() + ";";
 			
-			token.addResponder(new AsyncResponder(getFileInfoSuccess, getFileInfoFailure, token));
-			
-			function getFileInfoSuccess(data:Object, token:MySqlToken):void
+			var result = c.databaseService.readFromDB(SERVICE_NAME, statement);
+			if (result is SQLError)
 			{
-				var resultSet:ResultSet = new ResultSet(token);
-				//Mysql format: id(autogen) | FileName.ext | Start Index | EndIndex |  groupID | md5
-				
-				if (resultSet.next())
-				{
-					//Reference to file exists. Browse for save..
-					file.browseForDirectory("Select a location to save the file..");
-					file.addEventListener(Event.SELECT, handleBrowseForSaveSelection);
-					//tmp index
-					saveLocations.push(file);
-					resultSets.push(resultSet);
-				}
-				else
-				{
-					dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, "No file by that ID exists in the public database.."));
-				}
+				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, "MYSQL Error: " + (result as SQLError).details));
+				return;
 			}
-			function getFileInfoFailure(data:Object, token:MySqlToken):void
+			
+			//Mysql format: id(autogen) | FileName.ext | Start Index | EndIndex |  groupID | md5
+			
+			if ((result as SQLResult).data.length == -1)
 			{
-				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, "MYSQL Error: " + data));
+				dispatchEvent(new FileSharingEvent(FileSharingEvent.ERROR, "No file by that ID exists in the public database.."));
+			}
+			else
+			{
+				//Reference to file exists. Browse for save..
+				file.browseForDirectory("Select a location to save the file..");
+				file.addEventListener(Event.SELECT, handleBrowseForSaveSelection);
+				//tmp index
+				saveLocations.push(file);
+				resultSets.push(result);
 			}
 		}
 		
@@ -410,19 +406,19 @@ package sfxworks.services
 		{
 			e.target.removeEventListener(Event.SELECT, handleBrowseForSaveSelection);
 			
-			var resultSet:ResultSet = resultSets[saveLocations.indexOf(e.target)];
+			var resultSet:SQLResult = resultSets[saveLocations.indexOf(e.target)];
 			resultSets.splice(resultSets.indexOf(resultSet),1);//Remove from tmp index
 			saveLocations.splice(saveLocations.indexOf(e.target),1); //Remove from tmp index
 			
-			var groupNumber:Number = resultSet.getNumber("groupid");
-			var startIndex:Number = resultSet.getNumber("startindex");
-			var endIndex:Number = resultSet.getNumber("endindex");
-				
+			var groupNumber:Number = resultSet.data[0].groupid;
+			var startIndex:Number = resultSet.data[0].startindex;
+			var endIndex:Number = resultSet.data[0].endindex;
+			
 			var filePartListing:Vector.<Number> = new Vector.<Number>();
 			var filePathListing:Vector.<String> = new Vector.<String>();;
 			var fileMd5Listing:Vector.<String> = new Vector.<String>();;
 			
-			var mdraw:Array = resultSet.getString("md5").split(",");
+			var mdraw:Array = resultSet.data[0].md5.split(",");
 				
 			for (var i:Number = startIndex; i < endIndex; i++)
 			{
@@ -434,10 +430,10 @@ package sfxworks.services
 			//Order [idnumbers][paths] max | md5 | name | groupID | locationToSave
 			filesToHandle.push(filePartListing); //idnumbers
 			filesToHandle.push(filePathListing); //paths
-			filesToHandle.push(resultSet.getInt("endindex"));
-			filesToHandle.push(resultSet.getString("md5"));
-			filesToHandle.push(resultSet.getString("filename"));
-			filesToHandle.push(resultSet.getInt("groupID"));
+			filesToHandle.push(resultSet.data[0].endindex);
+			filesToHandle.push(resultSet.data[0].md5);
+			filesToHandle.push(resultSet.data[0].filename);
+			filesToHandle.push(resultSet..data[0].groupID);
 			filesToHandle.push(e.target);
 			
 			c.addWantObject(SERVICE_NAME + groupNumber.toString(), startIndex, endIndex);
