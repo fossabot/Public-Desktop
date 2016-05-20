@@ -366,7 +366,7 @@ package
 		//Conneccted
 		private function handleNetworkConnected(e:NetworkEvent):void 
 		{
-			trace("connected.");
+			trace("Communications successfully connected.");
 			//Handle Communications key
 			communications_mc.status_mc.gotoAndStop(2);
 			for (var i:int = 0; i < 6; i++)
@@ -399,7 +399,7 @@ package
 			communications_mc.status_mc.globalGroupVoice_mc.addEventListener(MouseEvent.CLICK, handleVoiceChatClick);
 			
 			//Desktop Service
-			communications_mc.status_mc.publicDesktop_mc.addEventListener(MouseEvent.CLICK, handlePublicDesktopClick);
+			//communications_mc.status_mc.publicDesktop_mc.addEventListener(MouseEvent.CLICK, handlePublicDesktopClick);
 			
 			//Enable hover over & out
 			//communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
@@ -896,7 +896,7 @@ package
 				embededObject.addEventListener(Event.COMPLETE, handleEmbedLoadComplete); //Add event listener for load complete
 				//embededObject.addEventListener(ProgressEvent.PROGRESS, handleProgressEvent);
 				
-				embedframe_mc.attachment_mc.gotoAndStop(2); //Display fun animation with 0s and 1s
+				//embedframe_mc.attachment_mc.gotoAndStop(2); //Display fun animation with 0s and 1s
 				
 				trace("Loading new embeded object: ");
 				trace(embedframe_mc.embedcode_txt.text);
