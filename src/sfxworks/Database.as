@@ -15,7 +15,7 @@ package sfxworks
 		public var localConnection:SQLConnection; //Path to db
 		public var recordConnection:SQLConnection; //Path to db of records
 		public var dbInfoFile:File;
-		private var step:Number;
+		private var _step:Number;
 		public var loadedSteps:Number;
 		public var stepsToLoad:Number;
 		
@@ -24,26 +24,24 @@ package sfxworks
 		
 		public function Database() 
 		{
-			super();
-		}
-		
-		public function get step():uint 
-		{
-			var fs:FileStream = new FileStream();
-			fs.open(dbInfoFile, FileMode.WRITE);
-			var returnValue:uint = fs.readFloat();
-			fs.close();
 			
-			return returnValue;
 		}
 		
 		public function set step(value:Number):void 
 		{
 			_step = value;
+			
+			trace("Database: Saving step to " + dbInfoFile.nativePath);
 			var fs:FileStream = new FileStream();
 			fs.open(dbInfoFile, FileMode.WRITE);
 			fs.writeFloat(value);
 			fs.close();
+			
+		}
+		
+		public function get step():Number 
+		{
+			return _step;
 		}
 		
 	}

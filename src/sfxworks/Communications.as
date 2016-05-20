@@ -1,4 +1,4 @@
-package sfxworks 
+﻿package sfxworks 
 {
 	import air.net.URLMonitor;
 	import com.maclema.mysql.Connection;
@@ -41,7 +41,6 @@ package sfxworks
 	public class Communications extends EventDispatcher
 	{
 		private var _netConnection:NetConnection;
-		private var mysqlConnection:Connection;
 		
 		private var _databaseService:DatabaseService;
 		private static const PUBLIC_KEY_DATABASE:String = "COMMUNICATIONS-PKDB";
@@ -72,9 +71,6 @@ package sfxworks
 		private var groups:Vector.<NetGroup>;
 		private var groupNames:Vector.<String>;
 		
-		
-		//PublicKey and data management
-		//||
 		
 		public function Communications() 
 		{
@@ -149,7 +145,7 @@ package sfxworks
 		
 		public function addWantObject(groupName:String, startIndex:Number, endIndex:Number):void //Requests objects from the group.
 		{
-			groups[groupName.indexOf(groupName)].addWantObjects(startInded, endIndex);
+			groups[groupName.indexOf(groupName)].addWantObjects(startIndex, endIndex);
 		}
 		
 		public function addHaveObject(groupName:String, startIndex:Number, endIndex:Number):void //Adds a list of object the service, or whatever calls on commuication has.
@@ -212,7 +208,7 @@ package sfxworks
 			if (monitor.available)
 			{
 				dispatchEvent(new NetworkEvent(NetworkEvent.CONNECTING, ""));
-				mysql();
+				//p2pdb();
 			}
 			else
 			{
@@ -227,7 +223,7 @@ package sfxworks
 			switch(e.info.code)
 			{ 
 				case "NetConnection.Connect.Success":
-					trace("COMMUNICATIONS: Net connection successful. P2P public DB connection.");
+					trace("COMMUNICATIONS: Net connection successful. init P2P public DB connection.");
 					_nearID = _netConnection.nearID;
 					
 					p2pdb();
@@ -299,7 +295,7 @@ package sfxworks
 		private function handleDatabaseConnection(e:DatabaseServiceEvent):void 
 		{
 			trace("COMMUNICATIONS: Connected to p2p db.");
-			_databaseService.removeEventListener(DatabaseServiceEvent.CONNECTED);
+			_databaseService.removeEventListener(DatabaseServiceEvent.CONNECTED, handleDatabaseConnection);
 			
 			//TODO: Remove some sort of sql schedule that removes create if not exists functions
 			var statement:SQLStatement = new SQLStatement();
@@ -337,10 +333,13 @@ package sfxworks
 				fs.readBytes(_publicKey, 0, 24); //Read public key into identity
 				fs.close();
 				
+				st.text = "UPDATE users SET nearid = '" + _netConnection.nearID + "' WHERE publickey = @publickey;";
+				/*
 				st.text = "UPDATE users "
 				+ "SET nearid="+_netConnection.nearID+" "
-				+ "WHERE key=@publicKey;";
-				st.parameters["@publicKey"] = _publicKey;
+				+ "WHERE publickey=@publickey"; */
+				trace("Public key = " + _publicKey);
+				st.parameters["@publickey"] = _publicKey;
 			}
 			else //Register
 			{
@@ -354,8 +353,8 @@ package sfxworks
 				fs.writeBytes(_publicKey);
 				fs.close();
 				
-				st.sql = "INSERT INTO users (name, nearid, publickey)"
-					+ " VALUES ('"+File.userDirectory.name+"','"+_netConnection.nearID+"',@publicKey);";
+				st.text = "INSERT INTO users (name, nearid, publickey)"
+					+ " VALUES ('"+File.userDirectory.name+"','"+_netConnection.nearID+"',@publickey);";
 				st.parameters["@publicKey"] = _publicKey;
 			}
 			
@@ -380,7 +379,6 @@ package sfxworks
 		private function networkTimerRefresh(e:TimerEvent):void 
 		{
 			checkForUpdate();
-			checkGroups();
 		}
 		
 		private function checkForUpdate():void 
@@ -475,19 +473,6 @@ package sfxworks
 				trace("COMMUNICATIONS: Name change response error:" + result);
 				dispatchEvent(new NetworkActionEvent(NetworkActionEvent.ERROR, result));
 			}
-		}
-		
-		
-		//Add method to change group name
-		
-		private function mysqlError(info:Object, token:MySqlToken):void
-		{
-			trace("Mysql Error: " + info);
-		}
-		
-		private function mysqlSuccess(info:Object, token:MySqlToken):void
-		{
-			trace("Mysql Success: " + info);
 		}
 		
 	}

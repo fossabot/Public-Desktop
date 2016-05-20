@@ -26,7 +26,7 @@ package sfxworks.services
 	 */
 	public class DatabaseService extends EventDispatcher //Needs to be its own thread
 	{
-		public static const SERVICE_NAME:String = DatabaseService();
+		public static const SERVICE_NAME:String = "DATABASE_SERVICE";
 		public static const DATABASE_DIRECTORY:File = File.applicationStorageDirectory.resolvePath("db" + File.separator);
 		private var c:Communications;
 		private var databases:Vector.<Database>;
@@ -34,6 +34,7 @@ package sfxworks.services
 		public function DatabaseService(communications:Communications, target:flash.events.IEventDispatcher=null) 
 		{
 			super(target);
+			DATABASE_DIRECTORY.createDirectory();
 			trace("DATABASE_SERVICE init");
 			c = communications;
 			c.addEventListener(NetworkGroupEvent.OBJECT_RECIEVED, handleGroupObjectRecieved);
@@ -66,7 +67,7 @@ package sfxworks.services
 						var row = result.data[0];
 						
 						c.satisfyObjectRequest(e.groupName, e.groupObjectNumber, row.sql);
-						trace("DATABASE_SERVICE Satisfying object reqyest with " + row.sql);
+						trace("DATABASE_SERVICE Satisfying object request with " + row.sql);
 					}
 					return;
 				}
@@ -92,9 +93,9 @@ package sfxworks.services
 							if (e.groupObject as Number != db.step)
 							{
 								//Request all objects up to that point.
-								c.addWantObject(e.groupName, db.step, e.groupObject);
-								trace("DATABASE_SERVICE requesting row #" db.step + " through row # " + e.groupObject " for db: " + db.name + ".");
-								db.stepsToLoad = e.groupObject;
+								c.addWantObject(e.groupName, db.step, e.groupObject as Number);
+								trace("DATABASE_SERVICE requesting row #" + db.step + " through row # " + e.groupObject + " for db: " + db.name + ".");
+								db.stepsToLoad = e.groupObject as Number;
 							}
 							else
 							{
@@ -143,8 +144,8 @@ package sfxworks.services
 								//Syncronous. ^Got all sql statements. v Submits them to primary database
 								var result:SQLResult = state.getResult();
 								var numResults = result.data.length;
-								trace("DATABASE_SERVICE executing " + numResults - db.step " new sql statements on the local database: " + db.name + ".");
-								for (i = db.step; i < numResults; i++)
+								trace("DATABASE_SERVICE executing " + (numResults - db.step) + " new sql statements on the local database: " + db.name + ".");
+								for (var i = db.step; i < numResults; i++)
 								{ 
 									var row = result.data[i]; 
 									var sqlStatement:SQLStatement = row.sql as SQLStatement;
@@ -164,7 +165,7 @@ package sfxworks.services
 		
 		public function connectToDatabase(name:String, encryptionKey:ByteArray=null):void
 		{
-			trace("DATABASE_SERVICE conneting to " + db.name + ".");
+			trace("DATABASE_SERVICE conneting to " + name + ".");
 			
 			var gspec:GroupSpecifier = new GroupSpecifier(SERVICE_NAME + name);
 			gspec.multicastEnabled = true;
@@ -173,13 +174,12 @@ package sfxworks.services
 			var communicationLine:CommunicationLine = new CommunicationLine(c, SERVICE_NAME + name, gspec);
 			communicationLine.addEventListener(NetworkActionEvent.SUCCESS, handleCommunicationLineSuccess);
 			communicationLine.addEventListener(NetworkActionEvent.MESSAGE, handleMessage);
-			communicationLines.push(communicationLine);
 			
 			var sqlConnection:SQLConnection = new SQLConnection();
-			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name), SQLMode.CREATE, null, false, 1024, encryptionKey);
+			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(File.separator + name + ".db"), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			var recordSqlConnection:SQLConnection = new SQLConnection();
-			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record"), SQLMode.CREATE, null, false, 1024, encryptionKey);
+			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(File.separator + name + "_record.db"), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			var statement:SQLStatement = new SQLStatement();
 			var sql:String = "CREATE TABLE IF NOT EXISTS steps (" +  
@@ -191,7 +191,7 @@ package sfxworks.services
 			statement.text = sql;
 			statement.execute(); //TODO: Error handling
 			
-			var dbInfoFile:File = new File(DATABASE_DIRECTORY.nativePath + name + ".info");
+			var dbInfoFile:File = new File(DATABASE_DIRECTORY.nativePath + File.separator + name + ".info");
 			
 			var database:Database = new Database();
 			database.communicationLine = communicationLine;
@@ -201,20 +201,19 @@ package sfxworks.services
 			database.name = name;
 			database.recordConnection = recordSqlConnection;
 			
-			databases.push(db);
+			databases.push(database);
 		}
 		
 		private function handleCommunicationLineSuccess(e:NetworkActionEvent):void 
 		{
 			e.target.removeEventListener(NetworkActionEvent.SUCCESS, handleCommunicationLineSuccess);
-			
 			for each (var db:Database in databases)
 			{
-				if (db.name == e.info)
+				if (SERVICE_NAME + db.name == e.info)
 				{
 					trace("DATABASE_SERVICE communication line for " + db.name + " established.");
 					//get max number of entries from result db
-					c.addWantObject(e.info, 0, 0);
+					c.addWantObject(e.info as String, 0, 0);
 					//If no one responds in 10 seconds, assume that youre the only one online and take over.
 					//TODO: Make branch system for keeping of multible databases that may go offsync given 1 user isnt always online
 					
@@ -224,7 +223,7 @@ package sfxworks.services
 						if (db.loadedSteps == 0)
 						{
 							trace("DATABASE_SERVICE max gather function time-out.");
-							
+							db.step = 0;
 							//Assume that you're the only one online and take over
 							c.addHaveObject(SERVICE_NAME + db.name, 0, db.step);
 							db.loadedSteps = db.step;
@@ -233,6 +232,7 @@ package sfxworks.services
 						trace("DATABASE_SERVICE " + db.name + " is conneted.");
 						dispatchEvent(new DatabaseServiceEvent(DatabaseServiceEvent.CONNECTED, db.name));
 					}
+					trace("Timer triggered");
 					var t:Timer = new Timer(10000);
 					t.addEventListener(TimerEvent.TIMER, handleDatabaseTimer);
 					t.start();
@@ -254,11 +254,11 @@ package sfxworks.services
 			
 			//Actual database
 			var sqlConnection:SQLConnection = new SQLConnection();
-			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name), SQLMode.CREATE, null, false, 1024, encryptionKey);
+			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			//Record database
 			var recordSqlConnection:SQLConnection = new SQLConnection();
-			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record"), SQLMode.CREATE, null, false, 1024, encryptionKey);
+			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record"), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			//Is really going to suck if there are huge image bytearrays and they change a few times
 			//Will take up a bit of space. Only way I can think of to keep everything in sync though.
@@ -378,7 +378,7 @@ package sfxworks.services
 					
 					var recordStatement:SQLStatement = new SQLStatement();
 					recordStatement.sqlConnection = db.recordConnection;
-					recordStatement.text "INSERT INTO steps (sql, date) VALUES (@sql, @date);"; //possible todo: (md5 for statments and compare dates globally for better synchronization)
+					recordStatement.text = "INSERT INTO steps (sql, date) VALUES (@sql, @date);"; //possible todo: (md5 for statments and compare dates globally for better synchronization)
 					recordStatement.parameters["@sql"] = statement;
 					recordStatement.parameters["@date"] = new Date();
 					recordStatement.execute();

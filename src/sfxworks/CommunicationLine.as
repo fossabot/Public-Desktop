@@ -24,6 +24,7 @@ package sfxworks
 			super(target);
 			istreamConnected = new Boolean(false);
 			ostreamConnected = new Boolean(false);
+			
 			lineName = name;
 			
 			groupSpecifier = gspec;
@@ -35,20 +36,35 @@ package sfxworks
 			c.addEventListener(NetworkActionEvent.SUCCESS, handleSuccessfulNetConnection);
 		}
 		
+		private function handleSuccessfulGroupConnection(e:NetworkGroupEvent):void 
+		{
+			if (e.groupName == lineName)
+			{
+				trace("COMMUNICATION_LINE: Successfully connected to group:" + lineName +".");
+				trace("COMMUNICATION_LINE: Init stream hooks.");
+				iStream = new NetStream(e.target.netConnection, groupSpecifier.groupspecWithoutAuthorizations());
+				oStream = new NetStream(e.target.netConnection, groupSpecifier.groupspecWithoutAuthorizations());
+			}
+		}
+		
 		private function handleSuccessfulNetConnection(e:NetworkActionEvent):void 
 		{
-			if (e.info.stream == iStream)
+			if (e.info == iStream)
 			{
 				var clc:CommunicationLineClient = new CommunicationLineClient();
 				clc.addEventListener(CLCEvent.MESSAGE, handleIncommingMessage);
 				iStream.client = clc;
 				iStream.play("stream");
 				
+				istreamConnected = true;
+				
 				trace("COMMUNICATION_LINE:" + lineName + " Setup inbound stream.");
 			}
-			else if (e.info.stream == oStream)
+			else if (e.info == oStream)
 			{
 				oStream.publish("stream");
+				
+				ostreamConnected = true;
 				trace("COMMUNICATION_LINE:" + lineName + " Setup outbound stream.");
 			}
 			
