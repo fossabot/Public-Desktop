@@ -83,7 +83,15 @@
 					}
 					else
 					{
-						var so:SpaceObject = new SpaceObject(fs.readUTF(), fs.readUTF(), new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), fs.readDouble(), new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble()), _editMode, source.split(".")[source.split().length - 1]);
+						var source:String = fs.readUTF();
+						var actions:String = fs.readUTF();
+						var bounds:Rectangle = new Rectangle(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble());
+						var rotation:Number = fs.readDouble();
+						var matrix:Matrix = new Matrix(fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble(), fs.readDouble());
+						var sourceSize:Number = fs.readDouble();
+						var md5:String = fs.readUTF();
+						
+						var so:SpaceObject = new SpaceObject(source, actions, bounds, rotation, matrix, _editMode, source.split(".")[source.split(".").length - 1]);
 					}
 					
 					if (_editMode)
@@ -107,7 +115,10 @@
 			bounds_mc.addEventListener(MouseEvent.MOUSE_DOWN, handleBoundsMouseDown);
 			bounds_mc.addEventListener(MouseEvent.MOUSE_UP, handleBoundsMouseUp);
 			
-			
+			if (editMode)
+			{
+				this.editMode();
+			}
 		}
 		
 		private function handleBoundsMouseUp(e:MouseEvent):void 
@@ -232,19 +243,27 @@
 				fs.writeDouble(spaceObjects[i].transform.matrix.tx);
 				fs.writeDouble(spaceObjects[i].transform.matrix.ty);
 				
-				var source:File = new File(spaceObjects[i].source);
+				if (spaceObjects[i].source == "embeddedobject")
+				{
+					fs.writeDouble((spaceObjects[i].actions as String).length);
+					fs.writeUTF(MD5.hash(spaceObjects[i].actions as String));
+				}
+				else
+				{
+					var source:File = new File(spaceObjects[i].source);				
+					var tmp:ByteArray = new ByteArray();
+					var fs2:FileStream = new FileStream();
+					
+					fs2.open(source, FileMode.READ);
+						fs2.readBytes(tmp, 0, source.size);
+						fs2.close();
+					
+					//Add:FileSize
+					//Add:MD5
+					fs.writeDouble(source.size);
+					fs.writeUTF(MD5.hashBytes(tmp));
+				}
 				
-				var tmp:ByteArray = new ByteArray();
-				var fs2:FileStream = new FileStream();
-				
-				fs2.open(source, FileMode.READ);
-					fs2.readBytes(tmp, 0, source.size);
-					fs2.close();
-				
-				//Add:FileSize
-				//Add:MD5
-				fs.writeDouble(source.size);
-				fs.writeUTF(MD5.hashBytes(tmp));
 			}
 			fs.close();
 			
@@ -268,7 +287,7 @@
 			fileAccess.writeBytes(ba, 0, ba.length);
 			fileAccess.close();
 			*/
-			(parent as SpaceContainer).initSpaceMenu();
+			stagee.nativeWindow.close();
 		}
 		
 		private function handleEditKeyDown(e:KeyboardEvent):void 
@@ -389,7 +408,7 @@
 		private function handleSelection(e:Event):void //For file selection of text/video from embedded objects
 		{
 			fileToDisplay.removeEventListener(Event.SELECT, handleSelection);
-			var so:SpaceObject = new SpaceObject(fileToDisplay.nativePath, "", new Rectangle(rightMouseX, rightMouseY)) //Do they mirror eachother..
+			var so:SpaceObject = new SpaceObject(fileToDisplay.nativePath, "", new Rectangle(rightMouseX, rightMouseY), 0, null, true, fileToDisplay.extension);
 			so.addEventListener(MouseEvent.CLICK, contentClickHandler);
 			bounds_mc.addChild(so);
 			spaceObjects.push(so);

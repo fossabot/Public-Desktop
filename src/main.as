@@ -33,6 +33,7 @@ package
 	import flash.geom.Rectangle;
 	import flash.html.HTMLLoader;
 	import flash.media.Microphone;
+	import flash.net.FileFilter;
 	import flash.net.navigateToURL;
 	import flash.net.URLLoader;
 	import flash.net.URLLoaderDataFormat;
@@ -399,7 +400,7 @@ package
 			communications_mc.status_mc.globalGroupVoice_mc.addEventListener(MouseEvent.CLICK, handleVoiceChatClick);
 			
 			//Desktop Service
-			//communications_mc.status_mc.publicDesktop_mc.addEventListener(MouseEvent.CLICK, handlePublicDesktopClick);
+			communications_mc.status_mc.spaceNavigator_btn.addEventListener(MouseEvent.CLICK, handlePublicDesktopClick);
 			
 			//Enable hover over & out
 			//communications_mc.addEventListener(MouseEvent.ROLL_OVER, handleCommunicationsRollOver);
@@ -1247,6 +1248,8 @@ package
 				desktopService.removeEventListener(DesktopServiceEvent.SPACE_OBJECT_RECIEVED, handleInitialRequest);
 				desktopService.removeEventListener(DesktopServiceEvent.RESOURCE_OBJECT_RECIEVED, handleInitialRequest);
 				desktopService.removeEventListener(DesktopServiceEvent.PERMISSIONS_ERROR, handleDesktopPermissionsError);
+				publicDesktop_mc.navigation_mc.loadspace_btn.removeEventListener(MouseEvent.CLICK, handleLoadSpaceClick);
+				publicDesktop_mc.navigation_mc.editor_btn.removeEventListener(MouseEvent.CLICK, handlePDEditorClick);
 				publicDesktop_mc.navigation_mc.text_txt.removeEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
 				publicDesktop_mc.visible = false;
 			}
@@ -1254,7 +1257,51 @@ package
 			{
 				publicDesktop_mc.visible = true;
 				publicDesktop_mc.navigation_mc.text_txt.addEventListener(KeyboardEvent.KEY_DOWN, handlePublicDesktopKeyDown);
+				publicDesktop_mc.navigation_mc.loadspace_btn.addEventListener(MouseEvent.CLICK, handleLoadSpaceClick);
+				publicDesktop_mc.navigation_mc.editor_btn.addEventListener(MouseEvent.CLICK, handlePDEditorClick);
+				
 			}
+		}
+		
+		private function handlePDEditorClick(e:MouseEvent):void 
+		{
+			loadSpace("", true);
+		}
+		
+		private function handleLoadSpaceClick(e:MouseEvent):void 
+		{
+			var f:File = new File(File.applicationStorageDirectory.resolvePath("spaces" + File.separator).nativePath);
+			f.browseForOpen("Select a space to load.", [new FileFilter("Space Files", "*.space")]);
+			f.addEventListener(Event.SELECT, handleSpaceSelection);
+		}
+		
+		private function handleSpaceSelection(e:Event):void 
+		{
+			loadSpace(e.target.nativePath);
+		}
+		
+		private function loadSpace(space:String, editMode:Boolean=false):void
+		{
+			var spaceWindow:NativeWindow;
+			var spaceWindowOptions:NativeWindowInitOptions = new NativeWindowInitOptions();
+			
+			spaceWindowOptions.owner = backgroundWindow;
+			spaceWindowOptions.resizable = false;
+			spaceWindowOptions.systemChrome = NativeWindowSystemChrome.NONE;
+			spaceWindowOptions.type = NativeWindowType.NORMAL;
+			spaceWindowOptions.transparent = false;
+			spaceWindowOptions.maximizable = true;
+			spaceWindowOptions.minimizable = true;
+			spaceWindowOptions.renderMode = NativeWindowRenderMode.DIRECT;
+			
+			spaceWindow = new NativeWindow(spaceWindowOptions);
+			spaceWindow.bounds = Screen.mainScreen.bounds;
+			spaceWindow.x = 0;
+			spaceWindow.y = 0;
+			spaceWindow.stage.align = StageAlign.TOP_LEFT;
+			spaceWindow.stage.scaleMode = StageScaleMode.NO_SCALE;
+			spaceWindow.activate();
+			spaceWindow.stage.addChild(new Space(spaceWindow.stage, space, editMode, false));
 		}
 		
 		private function handlePublicDesktopKeyDown(e:KeyboardEvent):void 

@@ -89,6 +89,7 @@
 					trace("It's a gif!");
 					var gifplayer:GIFPlayer = new GIFPlayer();
 					gifplayer.loadBytes(ba);
+					gifplayer.play();
 					addChild(gifplayer);
 				}
 				else //Handle objecet as normals
@@ -168,7 +169,6 @@
 				htmlBm = new Bitmap(bmd);
 				//removeChildren();
 				addChild(htmlBm);
-				trace("Html Render Complete");
 			}
 			else
 			{
