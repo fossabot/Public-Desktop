@@ -43,7 +43,7 @@
 		private var _netConnection:NetConnection;
 		
 		private var _databaseService:DatabaseService;
-		private static const PUBLIC_KEY_DATABASE:String = "COMMUNICATIONS-PKDB";
+		private static const PUBLIC_KEY_DATABASE:String = "COMMUNICATIONS-PKDB3";
 		
 		//MyIdentity
 		private var _name:String;
@@ -320,7 +320,7 @@
 			}
 			
 			var f:File = new File();
-			f = File.applicationStorageDirectory.resolvePath(".s3key");
+			f = File.applicationStorageDirectory.resolvePath(".s6key");
 			
 			var fs:FileStream = new FileStream();
 			var st:SQLStatement = new SQLStatement();
@@ -354,8 +354,9 @@
 				fs.close();
 				
 				st.text = "INSERT INTO users (name, nearid, publickey)"
-					+ " VALUES ('"+File.userDirectory.name+"','"+_netConnection.nearID+"',@publickey);";
-				st.parameters["@publicKey"] = _publicKey;
+					+ " VALUES ('" + File.userDirectory.name+"' , '%" + _netConnection.nearID + "%' , @publickey);";
+				trace("Public key = " + _publicKey);
+				st.parameters["@publickey"] = _publicKey;
 			}
 			
 			trace("COMMUNICATIONS: Sending query to server..");
