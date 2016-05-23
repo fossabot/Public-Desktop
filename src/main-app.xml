@@ -17,12 +17,12 @@
 	</name>
 -->
 <application xmlns="http://ns.adobe.com/air/application/14.0">
-  <id>main</id>
-  <versionNumber>1.0</versionNumber>
-  <filename>main</filename>
-  <description/>
-  <name>main</name>
-  <copyright/>
+  <id>Project-Desktop-1337</id>
+  <versionNumber>2.0</versionNumber>
+  <filename>Project Desktop</filename>
+  <description>Powerful peer to peert communication managemetn system with ui to better explorer</description>
+  <name>Project Desktop</name>
+  <copyright>MIT License</copyright>
   <initialWindow>
     <content>main.swf</content>
     <systemChrome>none</systemChrome>
@@ -34,10 +34,16 @@
 	  <depthAndStencil>true</depthAndStencil>
     <maximizable>true</maximizable>
     <minimizable>true</minimizable>
-    <resizable>true</resizable>
+    <resizable>false</resizable>
   </initialWindow>
-  <icon/>
+  <icon>
+    <image16x16>assets/16icon.png</image16x16>
+    <image32x32>assets/32icon.png</image32x32>
+    <image48x48>assets/48icon.png</image48x48>
+    <image128x128>assets/128icon.png</image128x128>
+  </icon>
+	
   <customUpdateUI>false</customUpdateUI>
   <allowBrowserInvocation>false</allowBrowserInvocation>
-  <supportedProfiles>desktop extendedDesktop </supportedProfiles>
+  <supportedProfiles>extendedDesktop </supportedProfiles>
 </application>

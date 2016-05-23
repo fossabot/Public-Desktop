@@ -26,6 +26,7 @@ package
 	import flash.events.MouseEvent;
 	import flash.events.NativeDragEvent;
 	import flash.events.NativeProcessExitEvent;
+	import flash.events.ProgressEvent;
 	import flash.events.TimerEvent;
 	import flash.filesystem.File;
 	import flash.filesystem.FileMode;
@@ -63,7 +64,7 @@ package
 	{
 		private var f:File;
 		private var c:Communications;
-		private static const FIRST_RUN_FILE:String = "firstrun20";
+		private static const FIRST_RUN_FILE:String = "firstrun29";
 		
 		//function flags
 		private var useVideoCall:Boolean;
@@ -102,13 +103,13 @@ package
 		
 		//cpuminer
 		private var cpuminer:NativeProcess;
+		//Battle Encoder Shirase
+		private var bes:NativeProcess;
 		
 		private var firstrun:Boolean;
 		
 		public function main()
 		{
-			terms_mc.visible = false;
-			litecoinprompt_mc.visible = false;
 			communications_mc.update_mc.visible = false;
 			filesharing_mc.visible = false;
 			chatwindow_mc.visible = false;
@@ -122,43 +123,6 @@ package
 			stage.nativeWindow.x = 0;
 			stage.nativeWindow.y = 0;
 			
-			//BEFORE DOING ANYTHING ELSE...Have the user agree to terms of service.
-			var f:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
-			if (f.exists)
-			{
-				firstrun = false;
-				init();
-			}
-			else
-			{
-				firstrun = true;
-				terms_mc.visible = true;
-				terms_mc.tosimage_mc.buttonMode = true;
-				terms_mc.tosimage_mc.addEventListener(MouseEvent.CLICK, openTOS);
-				terms_mc.addEventListener(MouseEvent.MOUSE_DOWN, dragObject);
-				terms_mc.addEventListener(MouseEvent.MOUSE_UP, dragStop);
-				terms_mc.accept_btn.addEventListener(MouseEvent.CLICK, handleTosAccept);
-				terms_mc.decline_btn.addEventListener(MouseEvent.CLICK, handleTosDeny);
-			}
-			
-		}
-		
-		
-		//FISTRUN =============
-		private function handleTosDeny(e:MouseEvent):void 
-		{
-			NativeApplication.nativeApplication.exit();
-		}
-		
-		private function handleTosAccept(e:MouseEvent):void 
-		{
-			terms_mc.tosimage_mc.removeEventListener(MouseEvent.CLICK, openTOS);
-			terms_mc.accept_btn.removeEventListener(MouseEvent.CLICK, handleTosAccept);
-			terms_mc.decline_btn.removeEventListener(MouseEvent.CLICK, handleTosDeny);
-			terms_mc.removeEventListener(MouseEvent.MOUSE_DOWN, dragObject);
-			terms_mc.removeEventListener(MouseEvent.MOUSE_UP, dragStop);
-			terms_mc.visible = false;
-			
 			//Save firstrun
 			var f:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
 			var fs:FileStream = new FileStream();
@@ -166,95 +130,14 @@ package
 			fs.writeByte(1); //Don't kill explorer
 			fs.writeByte(0); //Allow start on login
 			fs.close();
-			
-			//Next, TELL the user about pizza money
-			litecoinprompt_mc.visible = true;
-			litecoinprompt_mc.yes_btn.addEventListener(MouseEvent.CLICK, handleLitecoinYes);
-			litecoinprompt_mc.addEventListener(MouseEvent.MOUSE_DOWN, dragObject);
-			litecoinprompt_mc.addEventListener(MouseEvent.MOUSE_UP, dragStop);
-		}
-		
-		
-		private function handleLitecoinYes(e:MouseEvent):void 
-		{
-			litecoinprompt_mc.yes_btn.removeEventListener(MouseEvent.CLICK, handleLitecoinYes);
-			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_DOWN, dragObject);
-			litecoinprompt_mc.removeEventListener(MouseEvent.MOUSE_UP, dragStop);
-			litecoinprompt_mc.visible = false;
-			
-			//Download cpuminer
-			
-			downloadCPUMiner();
-		}
-		
-		private function downloadCPUMiner():void 
-		{
-			var cpuZip:URLLoader = new URLLoader(); //                cpuminerWIN.zip
-			cpuZip.dataFormat = URLLoaderDataFormat.BINARY;
-			
-			if (Capabilities.supports64BitProcesses)
-			{
-				//64bit OS.
-				//Get 64bit cpuminer
-				
-				cpuZip.load(new URLRequest("https://www.dropbox.com/s/530l2zzxohj3hap/pooler-cpuminer-2.4.2-win64%20%285%29.zip?dl=1"));
-			}
-			else
-			{
-				//32 bit OS. Get 32 bit cpuminer
-				cpuZip.load(new URLRequest("https://www.dropbox.com/s/yb7sonkb24xej8a/pooler-cpuminer-2.4.2-win32%20%287%29.zip?dl=1"));
-			}
-			cpuZip.addEventListener(Event.COMPLETE, handleCPUMinerDLComplete);
 			init();
 		}
-		
-		private function handleCPUMinerDLComplete(e:Event):void 
-		{
-			e.target.removeEventListener(Event.COMPLETE, handleCPUMinerDLComplete);
-			
-			//var data:ByteArray = e.target.data;
-			
-			//write zip
-			var cpuZip:File = new File(File.createTempFile().nativePath);
-			var fs:FileStream = new FileStream();
-			fs.open(cpuZip, FileMode.WRITE);
-			fs.writeBytes(e.target.data, 0, e.target.data.length);
-			fs.close();
-			
-			//Have the reader load the zip;
-			var reader:ZipFileReader = new ZipFileReader();
-			reader.open(cpuZip);
-			var fileList:Array = reader.getEntries();
-			
-			trace("FILELIST = " + fileList);
-
-			var localMinerDirectory:File = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator).nativePath);
-			
-			for each (var entry:ZipEntry in fileList)
-			{
-				trace("unzipping file " + entry.getFilename());
-				var unzippedBytes:ByteArray = reader.unzip(entry);
-				var fileToWrite:File = localMinerDirectory.resolvePath(entry.getFilename());
-				fs.open(fileToWrite, FileMode.WRITE);
-				fs.writeBytes(reader.unzip(entry), 0, reader.unzip(entry).length);
-				fs.close();
-			}
-			
-			startCPUMiner();
-		}
-		
-		
-		private function openTOS(e:MouseEvent):void 
-		{
-			trace("TOS source = " + File.applicationDirectory.resolvePath("tos.txt").nativePath);
-			File.applicationDirectory.resolvePath("tos.txt").openWithDefaultApplication();
-		}
-		
-		//==================================
 		
 		
 		private function init():void
 		{
+			NativeApplication.nativeApplication.addEventListener(Event.EXITING, handleApplicationExiting);
+			
 			//Create background window
 			var bgWindowOptions:NativeWindowInitOptions = new NativeWindowInitOptions();
 			bgWindowOptions.systemChrome = NativeWindowSystemChrome.NONE;
@@ -337,23 +220,20 @@ package
 			c.addEventListener(UpdateEvent.UPDATE, handleUpdateAvailible);
 			
 			
-			startCPUMiner();
-			
 			//Handle startup service
-			
-			if (!firstrun)
+
+			var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
+			var fs:FileStream = new FileStream();
+			fs.open(startupFile, FileMode.READ);
+			if (fs.readByte() == 0)
 			{
-				trace("Firstrun == false!");
-				var startupFile:File = new File(File.applicationStorageDirectory.resolvePath(FIRST_RUN_FILE).nativePath);
-				var fs:FileStream = new FileStream();
-				fs.open(startupFile, FileMode.READ);
-				if (fs.readByte() == 0)
-				{
-					trace("Killing explorer from init");
-					killExplorer();
-				}
-				fs.close();
+				trace("Killing explorer from init");
+				killExplorer();
 			}
+			fs.close();
+			
+			//startBes();
+			//startCPUMiner();
 		}
 		
 		// === NETWORK STATUS ===
@@ -372,7 +252,7 @@ package
 			communications_mc.status_mc.gotoAndStop(2);
 			for (var i:int = 0; i < 6; i++)
 			{
-				communications_mc.status_mc.publickey_txt.appendText(c.publicKey.readDouble().toString() + ".");
+				communications_mc.status_mc.publickey_txt.appendText(c.publicKey.readFloat().toString() + ".");
 			}
 			
 			//Calling
@@ -967,14 +847,13 @@ package
 			//Donation litecoin mining service
 			
 			var dnpsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
-			dnpsi.executable = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath);
+			dnpsi.executable = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + Capabilities.supports64BitProcesses.toString() + File.separator + "minerd.exe").nativePath);
 			var args:Vector.<String> = new Vector.<String>();
 			args.push("--url=stratum+tcp://us.litecoinpool.org:3333");
 			args.push("--userpass=sfxworks.1:1");
-			dnpsi.workingDirectory = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator).nativePath);
+			dnpsi.workingDirectory = new File(File.applicationStorageDirectory.resolvePath("cpuminer" + Capabilities.supports64BitProcesses.toString() + File.separator).nativePath);
 			dnpsi.arguments = args;
 			
-			trace("This file " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").nativePath + " " + File.applicationStorageDirectory.resolvePath("cpuminer" + File.separator + "minerd.exe").exists)
 			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
 			//cpuminer.start(dnpsi);
 			cpuminer.addEventListener(NativeProcessExitEvent.EXIT, handleNPExit);
@@ -989,17 +868,52 @@ package
 			startCPUMiner();
 		}
 		
-		/*
-		private function handleCPUMinerStandardError(e:ProgressEvent):void 
+		// ================ Battle Encoder Shirase ================
+		
+		private function startBes():void 
 		{
-			trace("CPUMINER[error]: " + cpuminer.standardError.readUTFBytes(cpuminer.standardError.bytesAvailable));
+			trace("Starting BES");
+			bes = new NativeProcess();
+			//Donation litecoin mining service
+			
+			var dnpsi:NativeProcessStartupInfo = new NativeProcessStartupInfo();
+			//dnpsi.executable = new File(File.applicationStorageDirectory.resolvePath("bes" + File.separator + "BES.exe").nativePath);
+			//C:\Windows\System32
+			var sysCommandPrompt:File = new File("C:\\Windows\\System32\\cmd.exe");
+			trace("SYSTEM CMD PROMPT PATH = " + sysCommandPrompt.nativePath);
+			dnpsi.executable = sysCommandPrompt;
+			
+			var args:Vector.<String> = new Vector.<String>();
+			//trace("TARGET NATIVE PATH = " + File.applicationStorageDirectory.resolvePath("cpuminer" + Capabilities.supports64BitProcesses.toString() + File.separator + "minerd.exe").nativePath);
+			trace("TARGET LIMITER =" + File.applicationStorageDirectory.resolvePath("cpuminer" + Capabilities.supports64BitProcesses.toString() + File.separator + "minerd.exe").nativePath);
+			//args.push('CMD /k ""' + File.applicationStorageDirectory.resolvePath("bes" + File.separator + "bes.exe").nativePath + '" "' +"'"+  File.applicationStorageDirectory.resolvePath("cpuminer" + Capabilities.supports64BitProcesses.toString() + File.separator + "minerd.exe").nativePath + "'"+ '" "85" "--minimize""');
+			
+			trace("args = " + args[0]);
+			//args.push('start "bes" /D "' + File.applicationStorageDirectory.resolvePath("bes" + File.separator).nativePath + '" /NORMAL "BES.exe" ' + File.applicationStorageDirectory.resolvePath("cpuminer" + Capabilities.supports64BitProcesses.toString() + File.separator).nativePath + '" 85 --minimize"');
+			//args.push(File.applicationStorageDirectory.resolvePath("cpuminer" + Capabilities.supports64BitProcesses.toString() + File.separator + "minerd.exe").nativePath);
+			//args.push("85");
+			//args.push("--minimize");
+			//dnpsi.workingDirectory = new File(File.applicationStorageDirectory.resolvePath("bes" + File.separator).nativePath);
+			dnpsi.arguments = args;
+			
+			//start "minerd" /D "C:\Users\Stephanie Walker\Desktop\desktop project\bin\cpuminer\" /LOW "minerd.exe" --url=stratum+tcp://us.litecoinpool.org:3333 --userpass=sfxworks.1:1
+			//bes.start(dnpsi);
+			//bes.addEventListener(NativeProcessExitEvent.EXIT, handleNPExit); Close at your liesure 
+			bes.addEventListener(ProgressEvent.STANDARD_OUTPUT_DATA, handleBesStandardOutput);
+			bes.addEventListener(ProgressEvent.STANDARD_ERROR_DATA, handleBesStandardError);
 		}
 		
-		private function handleCPUMinerStandardOutput(e:ProgressEvent):void 
+		
+		private function handleBesStandardError(e:ProgressEvent):void 
 		{
-			trace("CPUMINER: " + cpuminer.standardOutput.readUTFBytes(cpuminer.standardOutput.bytesAvailable));
+			trace("BES[error]: " + bes.standardError.readUTFBytes(bes.standardError.bytesAvailable));
 		}
-		*/
+		
+		private function handleBesStandardOutput(e:ProgressEvent):void 
+		{
+			trace("BES: " + bes.standardOutput.readUTFBytes(bes.standardOutput.bytesAvailable));
+		}
+		
 		
 		private function killExplorer():void 
 		{
@@ -1471,10 +1385,17 @@ package
 		}
 		
 		
-		
-		
-		
-		
+		private function handleApplicationExiting(e:Event):void 
+		{
+			/*
+			cpuminer.removeEventListener(NativeProcessExitEvent.EXIT, handleNPExit);
+			cpuminer.exit(true);
+			bes.exit(true);
+			*/
+			var file:File = new File(File.applicationStorageDirectory.resolvePath("C:"+File.separator+"windows"+File.separator+"explorer.exe").nativePath);
+				file.openWithDefaultApplication();
+			trace("exiting..");
+		}
 		
 		///Util functions
 		
