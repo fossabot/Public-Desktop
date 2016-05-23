@@ -43,7 +43,7 @@
 		private var _netConnection:NetConnection;
 		
 		private var _databaseService:DatabaseService;
-		private static const PUBLIC_KEY_DATABASE:String = "COMMUNICATIONS-PKDB3";
+		private static const PUBLIC_KEY_DATABASE:String = "COMMUNICATIONS-PKDB";
 		
 		//MyIdentity
 		private var _name:String;

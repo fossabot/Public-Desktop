@@ -17,8 +17,8 @@
 	</name>
 -->
 <application xmlns="http://ns.adobe.com/air/application/14.0">
-  <id>Project-Desktop-1337</id>
-  <versionNumber>2.0.1</versionNumber>
+  <id>Project-Desktop</id>
+  <versionNumber>2.0.2</versionNumber>
   <filename>Project Desktop</filename>
   <description>Powerful peer to peert communication managemetn system with ui to better explorer.</description>
   <name>Project Desktop</name>

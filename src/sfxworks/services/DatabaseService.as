@@ -176,10 +176,10 @@ package sfxworks.services
 			communicationLine.addEventListener(NetworkActionEvent.MESSAGE, handleMessage);
 			
 			var sqlConnection:SQLConnection = new SQLConnection();
-			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(File.separator + name + ".db"), SQLMode.CREATE, true, 1024, encryptionKey);
+			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + ".db"), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			var recordSqlConnection:SQLConnection = new SQLConnection();
-			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(File.separator + name + "_record.db"), SQLMode.CREATE, true, 1024, encryptionKey);
+			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record.db"), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			var statement:SQLStatement = new SQLStatement();
 			var sql:String = "CREATE TABLE IF NOT EXISTS steps (" +  
@@ -254,11 +254,11 @@ package sfxworks.services
 			
 			//Actual database
 			var sqlConnection:SQLConnection = new SQLConnection();
-			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name), SQLMode.CREATE, true, 1024, encryptionKey);
+			sqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + ".db"), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			//Record database
 			var recordSqlConnection:SQLConnection = new SQLConnection();
-			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record"), SQLMode.CREATE, true, 1024, encryptionKey);
+			recordSqlConnection.open(DATABASE_DIRECTORY.resolvePath(name + "_record.db"), SQLMode.CREATE, true, 1024, encryptionKey);
 			
 			//Is really going to suck if there are huge image bytearrays and they change a few times
 			//Will take up a bit of space. Only way I can think of to keep everything in sync though.
